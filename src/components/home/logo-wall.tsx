@@ -46,10 +46,10 @@ export function LogoWall({ locale, organizations }: { locale: string; organizati
                     {scrollingLogos.map((org, index) => (
                         <div
                             key={`${org.id}-${index}`}
-                            className="flex flex-col items-center justify-center min-w-[80px] sm:min-w-[120px] transition-all duration-300 opacity-80 hover:opacity-100"
+                            className="flex flex-col items-center justify-center min-w-[100px] sm:min-w-[140px] transition-all duration-300 opacity-80 hover:opacity-100"
                         >
                             {org.logo_url ? (
-                                <div className="relative w-12 h-12 sm:w-16 sm:h-16 mb-2">
+                                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-2">
                                     <Image
                                         src={org.logo_url}
                                         alt={isRtl ? org.name_ar : org.name_en}
@@ -58,7 +58,7 @@ export function LogoWall({ locale, organizations }: { locale: string; organizati
                                     />
                                 </div>
                             ) : (
-                                <div className="h-12 w-12 sm:h-16 sm:w-16 flex items-center justify-center mb-2">
+                                <div className="h-16 w-16 sm:h-20 sm:w-20 flex items-center justify-center mb-2">
                                     <span className="text-xs text-muted-foreground font-bold">
                                         {(isRtl ? org.name_ar : org.name_en).slice(0, 3).toUpperCase()}
                                     </span>

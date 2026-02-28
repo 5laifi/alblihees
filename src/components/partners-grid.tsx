@@ -69,15 +69,16 @@ export function PartnersGrid({ locale, organizations }: { locale: string; organi
                             exit={{ opacity: 0, scale: 0.9 }}
                             transition={{ duration: 0.2 }}
                         >
-                            <Card className="aspect-square flex flex-col items-center justify-center p-6 text-center hover:shadow-lg transition-shadow gap-4 group">
+                            <Card className="aspect-square flex flex-col items-center justify-center p-4 text-center hover:shadow-lg transition-shadow gap-3 group">
                                 {/* Logo on white background for consistency */}
-                                <div className="flex-1 w-full rounded-xl flex items-center justify-center bg-white p-4 group-hover:scale-105 transition-transform overflow-hidden">
+                                <div className="w-full h-24 rounded-xl flex items-center justify-center bg-white p-3 group-hover:scale-105 transition-transform overflow-hidden">
                                     {org.logo_url ? (
                                         <div className="relative w-full h-full">
                                             <Image
                                                 src={org.logo_url}
                                                 alt={isRtl ? org.name_ar : org.name_en}
                                                 fill
+                                                sizes="120px"
                                                 className="object-contain"
                                             />
                                         </div>
