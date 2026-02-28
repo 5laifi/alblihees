@@ -76,7 +76,7 @@ export function Footer({ locale }: { locale: string }) {
         };
     }, []);
 
-    const email = profile?.email || "Tharii@me.com";
+    const email = profile?.email || "thari@ouraevents.com";
     const phone = profile?.phone || "60001617";
     const bioText = profile
         ? (locale === "ar" ? profile.short_bio_ar : profile.short_bio_en)
