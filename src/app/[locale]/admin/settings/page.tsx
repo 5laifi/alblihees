@@ -83,6 +83,7 @@ export default function AdminSettingsPage() {
     }
 
     const [uploading, setUploading] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
     const videoInputRef = useRef<HTMLInputElement>(null);
 
     async function handleVideoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -103,6 +104,18 @@ export default function AdminSettingsPage() {
             }
         } catch { toast.error("Error uploading video"); }
         finally { setUploading(false); if (videoInputRef.current) videoInputRef.current.value = ""; }
+    }
+
+    function handleDrop(e: React.DragEvent) {
+        e.preventDefault();
+        setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.type.startsWith("video/")) {
+            // Fake an event object to reuse the same upload handler easily
+            handleVideoUpload({ target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>);
+        } else {
+            toast.error("Please drop a valid video file (MP4 or WebM)");
+        }
     }
 
     if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
@@ -169,7 +182,14 @@ export default function AdminSettingsPage() {
                     </div>
                     <div className="space-y-2">
                         <Label>Or Upload Video</Label>
-                        <div className="flex items-center gap-3">
+                        <div
+                            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                                }`}
+                            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={handleDrop}
+                            onClick={() => videoInputRef.current?.click()}
+                        >
                             <input
                                 ref={videoInputRef}
                                 type="file"
@@ -177,16 +197,18 @@ export default function AdminSettingsPage() {
                                 onChange={handleVideoUpload}
                                 className="hidden"
                             />
-                            <Button
-                                variant="outline"
-                                onClick={() => videoInputRef.current?.click()}
-                                disabled={uploading}
-                                className="gap-2"
-                            >
-                                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                                {uploading ? "Uploading..." : "Choose Video File"}
-                            </Button>
-                            <p className="text-xs text-muted-foreground">MP4 or WebM · Max 50MB</p>
+                            {uploading ? (
+                                <div className="flex flex-col items-center gap-2">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                    <p className="text-sm text-muted-foreground">Uploading video...</p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center gap-2">
+                                    <Upload className="h-8 w-8 text-muted-foreground" />
+                                    <p className="text-sm font-medium">Drag & drop a video file here</p>
+                                    <p className="text-xs text-muted-foreground">or click to browse · MP4 or WebM · Max 50MB</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                     {settings.hero_video_url && (
