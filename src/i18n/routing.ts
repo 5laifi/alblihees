@@ -8,6 +8,9 @@ export const routing = defineRouting({
     // Used when no locale matches
     defaultLocale: 'ar',
 
+    // Disable auto-detection so all visitors land on Arabic by default
+    localeDetection: false,
+
     // Sub-path routing is used by default, but we can configure it 
     // to be hidden for the default locale if desired, but 
     // for this RTL default site, explicit /ar and /en is clear.
