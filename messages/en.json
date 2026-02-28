@@ -1,0 +1,73 @@
+{
+    "Common": {
+        "contactNow": "Contact now",
+        "whatsapp": "WhatsApp",
+        "contactUs": "Contact Us",
+        "viewMore": "View More",
+        "downloadResume": "Download Resume",
+        "quickLinks": "Quick Links",
+        "followUs": "Follow Us",
+        "copyright": "All rights reserved © {year} Thari Alblaihees",
+        "loading": "Loading..."
+    },
+    "Navigation": {
+        "home": "Home",
+        "about": "About",
+        "experience": "Experience",
+        "partners": "Partners",
+        "media": "Media",
+        "services": "Services",
+        "contact": "Contact"
+    },
+    "Home": {
+        "heroTitle": "Thari Alblaihees",
+        "heroSubtitle": "Media Personality . Educator . Presenter",
+        "heroDescription": "Crafting words to reach hearts, building a promising generation with knowledge and values.",
+        "statsTitle": "Numbers & Achievements",
+        "servicesTitle": "Services",
+        "clientsTitle": "Partners in Success",
+        "featuredMediaTitle": "Highlights",
+        "latestHighlights": "Latest Activity"
+    },
+    "About": {
+        "title": "Who is Dhari?",
+        "mission": "Mission",
+        "vision": "Vision",
+        "values": "Values"
+    },
+    "Services": {
+        "title": "Our Services",
+        "subtitle": "Integrated Media and Educational Solutions"
+    },
+    "Media": {
+        "title": "Media Gallery",
+        "audio": "Audio",
+        "video": "Video",
+        "photos": "Photos",
+        "noMedia": "No media found"
+    },
+    "Experience": {
+        "title": "Journey of Giving",
+        "timeline": "Career Timeline",
+        "clients": "Entities & Organizations"
+    },
+    "Partners": {
+        "title": "Partners in Success",
+        "subtitle": "We cherish the trust of our partners across various sectors",
+        "searchPlaceholder": "Search for an entity...",
+        "all": "All",
+        "channel": "Channels",
+        "entity": "Entities"
+    },
+    "Contact": {
+        "title": "Contact Me",
+        "subtitle": "For inquiries and bookings",
+        "formName": "Name",
+        "formEmail": "Email",
+        "formPhone": "Phone Number",
+        "formMessage": "Message",
+        "send": "Send",
+        "success": "Sent successfully!",
+        "error": "Something went wrong."
+    }
+}

@@ -1,0 +1,20 @@
+export const profile = {
+    nameAr: "ضاري مشعل خمد البليهيس",
+    nameEn: "Thari Alblaihees",
+    titleAr: "معلم ومقدم برامج",
+    titleEn: "Teacher & TV Presenter",
+    shortBioAr: "معلم لطلبة التوحد ومقدم برامج تلفزيونية وفعاليات مسرحية، بخبرة تمتد لأكثر من 16 عاماً في الإعلام و 14 عاماً في التربية.",
+    shortBioEn: "Autism teacher, TV presenter, and stage event host with over 16 years of media experience and 14 years in education.",
+    locationAr: "الكويت - اليرموك",
+    locationEn: "Kuwait - Yarmouk",
+    email: "Tharii@me.com",
+    phone: "60001617",
+    whatsapp: "60001617",
+    social: {
+        instagram: "https://instagram.com",
+        tiktok: "https://tiktok.com",
+        youtube: "https://youtube.com/@ThariiMB",
+        twitter: "https://twitter.com",
+    },
+    image: "/main-portrait.jpg",
+};

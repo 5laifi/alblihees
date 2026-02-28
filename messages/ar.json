@@ -1,0 +1,73 @@
+{
+    "Common": {
+        "contactNow": "تواصل الآن",
+        "whatsapp": "واتساب",
+        "contactUs": "تواصل معنا",
+        "viewMore": "المزيد",
+        "downloadResume": "تحميل السيرة الذاتية",
+        "quickLinks": "روابط سريعة",
+        "followUs": "تابعنا على",
+        "copyright": "جميع الحقوق محفوظة © {year} ضاري البليهيس",
+        "loading": "جاري التحميل..."
+    },
+    "Navigation": {
+        "home": "الرئيسية",
+        "about": "السيرة الذاتية",
+        "experience": "الخبرة",
+        "partners": "شركاء النجاح",
+        "media": "الوسائط",
+        "services": "الخدمات",
+        "contact": "التواصل"
+    },
+    "Home": {
+        "heroTitle": "ضاري البليهيس",
+        "heroSubtitle": "إعلامي . تربوي . مقدم برامج",
+        "heroDescription": "نصنع الكلمات لتصل إلى القلوب، ونبني جيلاً واعداً بالعلم والقيم.",
+        "statsTitle": "أرقام وإنجازات",
+        "servicesTitle": "ماذا نقدم؟",
+        "clientsTitle": "شركاء النجاح",
+        "featuredMediaTitle": "مقتطفات",
+        "latestHighlights": "آخر النشاطات"
+    },
+    "About": {
+        "title": "من هو ضاري؟",
+        "mission": "الرسالة",
+        "vision": "الرؤية",
+        "values": "القِيَم"
+    },
+    "Services": {
+        "title": "الخدمات المقدمة",
+        "subtitle": "حلول إعلامية وتربوية متكاملة"
+    },
+    "Media": {
+        "title": "المعرض الإعلامي",
+        "audio": "صوتيات",
+        "video": "مرئيات",
+        "photos": "صور",
+        "noMedia": "لا توجد وسائط لعرضها"
+    },
+    "Experience": {
+        "title": "رحلة العطاء",
+        "timeline": "المسيرة المهنية",
+        "clients": "الجهات والمنظمات"
+    },
+    "Partners": {
+        "title": "شركاء النجاح",
+        "subtitle": "نعتز بثقة شركائنا في مختلف القطاعات",
+        "searchPlaceholder": "بحث عن جهة...",
+        "all": "الكل",
+        "channel": "قنوات",
+        "entity": "جهات"
+    },
+    "Contact": {
+        "title": "تواصل معي",
+        "subtitle": "للاستفسارات وحجز المواعيد",
+        "formName": "الاسم",
+        "formEmail": "البريد الإلكتروني",
+        "formPhone": "رقم الهاتف",
+        "formMessage": "الرسالة",
+        "send": "إرسال",
+        "success": "تم الإرسال بنجاح!",
+        "error": "حدث خطأ ما."
+    }
+}
