@@ -49,16 +49,16 @@ export function LogoWall({ locale, organizations }: { locale: string; organizati
                             className="flex flex-col items-center justify-center min-w-[100px] sm:min-w-[140px] transition-all duration-300 opacity-80 hover:opacity-100"
                         >
                             {org.logo_url ? (
-                                <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-2">
+                                <div className="relative w-20 h-20 sm:w-24 sm:h-24 mb-2">
                                     <Image
                                         src={org.logo_url}
                                         alt={isRtl ? org.name_ar : org.name_en}
                                         fill
-                                        className="object-contain"
+                                        className="object-contain brightness-0 dark:brightness-0 dark:invert transition-[filter] duration-300"
                                     />
                                 </div>
                             ) : (
-                                <div className="h-16 w-16 sm:h-20 sm:w-20 flex items-center justify-center mb-2">
+                                <div className="h-20 w-20 sm:h-24 sm:w-24 flex items-center justify-center mb-2">
                                     <span className="text-xs text-muted-foreground font-bold">
                                         {(isRtl ? org.name_ar : org.name_en).slice(0, 3).toUpperCase()}
                                     </span>
