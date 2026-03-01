@@ -35,6 +35,27 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid file type." }, { status: 400 });
         }
 
+        // Cross-check extension against MIME type
+        const mimeToExtensions: Record<string, string[]> = {
+            "image/jpeg": ["jpg", "jpeg"],
+            "image/png": ["png"],
+            "image/webp": ["webp"],
+            "image/gif": ["gif"],
+            "image/svg+xml": ["svg"],
+            "audio/mpeg": ["mp3"],
+            "audio/mp3": ["mp3"],
+            "audio/wav": ["wav"],
+            "audio/ogg": ["ogg"],
+            "audio/aac": ["aac", "m4a"],
+            "video/mp4": ["mp4"],
+            "video/webm": ["webm"],
+            "video/ogg": ["ogg"],
+        };
+
+        const rawExt = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const allowedExts = mimeToExtensions[file.type] || [];
+        const ext = allowedExts.includes(rawExt) ? rawExt : allowedExts[0] || "bin";
+
         // Validate file size (50MB max for video, 10MB for audio, 5MB for images)
         const maxSize = file.type.startsWith("video/") ? 50 * 1024 * 1024
             : file.type.startsWith("audio/") ? 10 * 1024 * 1024
@@ -46,7 +67,6 @@ export async function POST(request: Request) {
         }
 
         // Generate unique filename
-        const ext = file.name.split(".").pop() || "bin";
         const prefix = file.type.startsWith("image/") ? "img"
             : file.type.startsWith("audio/") ? "audio"
                 : file.type.startsWith("video/") ? "video"

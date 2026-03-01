@@ -4,16 +4,45 @@ import { Resend } from "resend";
 import crypto from "crypto";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-// Use the same email from the contact form
-const ADMIN_EMAIL = "thari@ouraevents.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "thari@ouraevents.com";
+
+// Rate limiter for forgot-password
+const resetAttempts = new Map<string, { count: number; lastAttempt: number }>();
+const MAX_ATTEMPTS = 3;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const record = resetAttempts.get(ip);
+
+    if (!record || now - record.lastAttempt > WINDOW_MS) {
+        resetAttempts.set(ip, { count: 1, lastAttempt: now });
+        return false;
+    }
+
+    record.count++;
+    record.lastAttempt = now;
+    return record.count > MAX_ATTEMPTS;
+}
 
 export async function POST(request: Request) {
     try {
+        // Rate limiting
+        const forwarded = request.headers.get("x-forwarded-for");
+        const ip = forwarded?.split(",")[0]?.trim() || "unknown";
+
+        if (isRateLimited(ip)) {
+            return NextResponse.json(
+                { error: "Too many reset attempts. Please wait 15 minutes." },
+                { status: 429 }
+            );
+        }
+
         const body = await request.json();
         const { email } = body;
 
-        // Don't reveal if email exists or not to prevent enumeration, just say "If it matches, an email was sent"
-        if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+        // Don't reveal if email exists or not
+        if (!email || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
             return NextResponse.json({ success: true, message: "If the email matches the admin account, a reset link was sent." });
         }
 
@@ -32,10 +61,9 @@ export async function POST(request: Request) {
         await saveOrUpdateSetting(supabase, "password_reset_token", resetToken);
         await saveOrUpdateSetting(supabase, "password_reset_expires", expiresAt);
 
-        // Determine the base URL for the reset link
-        const host = request.headers.get("host") || "localhost:3000";
-        const protocol = host.includes("localhost") ? "http" : "https";
-        const resetUrl = `${protocol}://${host}/en/admin/reset-password?token=${resetToken}`;
+        // Use SITE_URL env var instead of trusting the Host header
+        const siteUrl = process.env.SITE_URL || "https://tharialblaihees.com";
+        const resetUrl = `${siteUrl}/en/admin/reset-password?token=${resetToken}`;
 
         // Send email
         await resend.emails.send({
