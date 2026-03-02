@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ConditionalLayout } from "@/components/conditional-layout";
 import { createServerSupabaseClient } from "@/lib/supabase";
+import { unstable_cache } from "next/cache";
 
 // Fonts
 const tajawal = Tajawal({
@@ -27,19 +28,23 @@ export const metadata: Metadata = {
     description: "Media Personality, Educator, and TV Presenter.",
 };
 
-async function isMaintenanceMode(): Promise<boolean> {
-    try {
-        const supabase = createServerSupabaseClient();
-        const { data } = await supabase
-            .from("site_settings")
-            .select("value")
-            .eq("key", "maintenance_mode")
-            .single();
-        return data?.value === "true";
-    } catch {
-        return false;
-    }
-}
+const isMaintenanceMode = unstable_cache(
+    async (): Promise<boolean> => {
+        try {
+            const supabase = createServerSupabaseClient();
+            const { data } = await supabase
+                .from("site_settings")
+                .select("value")
+                .eq("key", "maintenance_mode")
+                .single();
+            return data?.value === "true";
+        } catch {
+            return false;
+        }
+    },
+    ["maintenance_mode"],
+    { revalidate: 60 }
+);
 
 export default async function RootLayout({
     children,

@@ -6,13 +6,15 @@ const withNextIntl = createNextIntlPlugin(
 );
 
 const nextConfig: NextConfig = {
-  /* config options here */
   images: {
-    domains: [],
-    // Allow loading images from local relative paths if needed, 
-    // though 'next/image' usually handles imports automatically.
-    // For external placeholders/socials later we might need to add domains.
-  }
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'vqtpcwzcqytvofrzsdhl.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
 };
 
 export default withNextIntl(nextConfig);

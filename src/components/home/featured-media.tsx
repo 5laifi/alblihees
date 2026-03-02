@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { Play } from "lucide-react";
+import { YouTubeLazy } from "@/components/ui/youtube-lazy";
 
 interface MediaItem {
     id: string;
@@ -29,32 +30,24 @@ export function FeaturedMedia({ locale, mediaItems }: { locale: string; mediaIte
                 {(() => {
                     const featuredVideo = mediaItems.find(item => item.type === "video");
                     if (featuredVideo) {
+                        const ytMatch = featuredVideo.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                        const ytId = ytMatch ? ytMatch[1] : null;
+
                         return (
                             <Card className="overflow-hidden border-none shadow-lg relative aspect-video bg-black flex items-center justify-center">
-                                {(() => {
-                                    const ytMatch = featuredVideo.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-                                    const ytId = ytMatch ? ytMatch[1] : null;
-
-                                    if (ytId) {
-                                        return (
-                                            <iframe
-                                                className="w-full h-full"
-                                                src={`https://www.youtube.com/embed/${ytId}?rel=0`}
-                                                title={locale === 'ar' ? featuredVideo.title_ar : featuredVideo.title_en}
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                                allowFullScreen
-                                            ></iframe>
-                                        );
-                                    }
-
-                                    return (
-                                        <video
-                                            controls
-                                            src={featuredVideo.url || undefined}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    );
-                                })()}
+                                {ytId ? (
+                                    <YouTubeLazy
+                                        videoId={ytId}
+                                        title={locale === 'ar' ? featuredVideo.title_ar : featuredVideo.title_en}
+                                    />
+                                ) : (
+                                    <video
+                                        controls
+                                        src={featuredVideo.url || undefined}
+                                        className="w-full h-full object-cover"
+                                        preload="none"
+                                    />
+                                )}
                             </Card>
                         );
                     }
@@ -83,7 +76,7 @@ export function FeaturedMedia({ locale, mediaItems }: { locale: string; mediaIte
                                         {locale === 'ar' ? featuredAudio.title_ar : featuredAudio.title_en}
                                     </h3>
                                     <div className="w-full max-w-sm mx-auto pt-4">
-                                        <audio controls controlsList="nodownload noplaybackrate" src={featuredAudio.url || undefined} className="w-full h-10" />
+                                        <audio controls controlsList="nodownload noplaybackrate" src={featuredAudio.url || undefined} className="w-full h-10" preload="none" />
                                     </div>
                                 </div>
                                 <div className="absolute inset-0 bg-gradient-to-br from-[#78B7D0]/20 to-transparent pointer-events-none" />

@@ -55,6 +55,7 @@ export function Hero({ locale, profile, heroVideoUrl }: { locale: string; profil
                     loop
                     muted
                     playsInline
+                    preload="none"
                     className="absolute inset-0 w-full h-full object-cover opacity-50"
                 >
                     <source src={heroVideoUrl || "/hero-bg.mp4"} type="video/mp4" />
@@ -82,7 +83,7 @@ export function Hero({ locale, profile, heroVideoUrl }: { locale: string; profil
                             alt={heroName}
                             width={250}
                             height={310}
-                            className="w-full h-auto object-cover max-h-[280px]"
+                            className="w-full h-auto object-cover"
                             priority
                             style={{ borderRadius: '30px' }}
                         />

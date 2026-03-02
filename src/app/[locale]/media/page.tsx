@@ -4,8 +4,9 @@ import { SectionWrapper } from "@/components/section-wrapper";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMediaItems } from "@/lib/data";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Play, Mic, Image as ImageIcon } from "lucide-react";
+import { Mic } from "lucide-react";
+import { YouTubeLazy } from "@/components/ui/youtube-lazy";
+import Image from "next/image";
 
 export default async function MediaPage({ params }: { params: Promise<{ locale: string }> }) {
     const { locale } = await params;
@@ -35,42 +36,36 @@ export default async function MediaPage({ params }: { params: Promise<{ locale: 
 
                     <TabsContent value="video" className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {videos.length > 0 ? videos.map((video) => (
-                                <Card key={video.id} className="overflow-hidden border-none shadow-md flex flex-col">
-                                    <div className="aspect-video bg-black relative flex items-center justify-center">
-                                        {(() => {
-                                            const ytMatch = video.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-                                            const ytId = ytMatch ? ytMatch[1] : null;
+                            {videos.length > 0 ? videos.map((video) => {
+                                const ytMatch = video.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                                const ytId = ytMatch ? ytMatch[1] : null;
 
-                                            if (ytId) {
-                                                return (
-                                                    <iframe
-                                                        className="w-full h-full"
-                                                        src={`https://www.youtube.com/embed/${ytId}?rel=0`}
-                                                        title={isRtl ? video.title_ar : video.title_en}
-                                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                                        allowFullScreen
-                                                    ></iframe>
-                                                );
-                                            }
-
-                                            return (
+                                return (
+                                    <Card key={video.id} className="overflow-hidden border-none shadow-md flex flex-col">
+                                        <div className="aspect-video bg-black relative flex items-center justify-center">
+                                            {ytId ? (
+                                                <YouTubeLazy
+                                                    videoId={ytId}
+                                                    title={isRtl ? video.title_ar : video.title_en}
+                                                />
+                                            ) : (
                                                 <video
                                                     controls
                                                     src={video.url || undefined}
                                                     className="w-full h-full object-contain"
                                                     poster={video.thumbnail_url || undefined}
+                                                    preload="none"
                                                 />
-                                            );
-                                        })()}
-                                    </div>
-                                    <CardContent className="p-4 flex-1">
-                                        <h3 className="font-semibold text-lg line-clamp-2">
-                                            {isRtl ? video.title_ar : video.title_en}
-                                        </h3>
-                                    </CardContent>
-                                </Card>
-                            )) : (
+                                            )}
+                                        </div>
+                                        <CardContent className="p-4 flex-1">
+                                            <h3 className="font-semibold text-lg line-clamp-2">
+                                                {isRtl ? video.title_ar : video.title_en}
+                                            </h3>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            }) : (
                                 <p className="text-muted-foreground col-span-full text-center py-10">{t("noMedia") || "No videos found"}</p>
                             )}
                         </div>
@@ -87,7 +82,7 @@ export default async function MediaPage({ params }: { params: Promise<{ locale: 
                                         <h3 className="font-semibold px-1">
                                             {isRtl ? audio.title_ar : audio.title_en}
                                         </h3>
-                                        <audio controls controlsList="nodownload noplaybackrate" src={audio.url || undefined} className="w-full h-10" />
+                                        <audio controls controlsList="nodownload noplaybackrate" src={audio.url || undefined} className="w-full h-10" preload="none" />
                                     </div>
                                 </Card>
                             )) : (
@@ -100,10 +95,12 @@ export default async function MediaPage({ params }: { params: Promise<{ locale: 
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {photos.length > 0 ? photos.map((photo) => (
                                 <div key={photo.id} className="aspect-square bg-muted rounded-lg relative overflow-hidden group hover:shadow-xl transition-all cursor-zoom-in">
-                                    <img
-                                        src={photo.url || undefined}
+                                    <Image
+                                        src={photo.url}
                                         alt={isRtl ? photo.title_ar : photo.title_en}
-                                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                        fill
+                                        sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                                        className="object-cover transition-transform duration-300 group-hover:scale-105"
                                         loading="lazy"
                                     />
                                 </div>
