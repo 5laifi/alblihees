@@ -6,34 +6,26 @@ import { Instagram, Youtube, Mail, Phone } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
 
-interface ProfileData {
-    name_en: string;
-    short_bio_en: string;
-    short_bio_ar: string;
-    email: string;
-    phone: string;
-    social_instagram: string;
-    social_youtube: string;
-    social_twitter: string;
+export interface FooterProfile {
+    name_en?: string;
+    short_bio_en?: string;
+    short_bio_ar?: string;
+    email?: string;
+    phone?: string;
+    social_instagram?: string;
+    social_youtube?: string;
+    social_twitter?: string;
 }
 
-export function Footer({ locale }: { locale: string }) {
+export function Footer({ locale, profile = null }: { locale: string; profile?: FooterProfile | null }) {
     const t = useTranslations("Common");
     const navT = useTranslations("Navigation");
     const currentYear = new Date().getFullYear();
 
-    const [profile, setProfile] = useState<ProfileData | null>(null);
     const [showLogo, setShowLogo] = useState(false);
     const [showContent, setShowContent] = useState(false);
 
     const footerRef = useRef<HTMLElement>(null);
-
-    useEffect(() => {
-        fetch("/api/admin/profile")
-            .then(res => res.json())
-            .then(data => { if (data && !data.error) setProfile(data); })
-            .catch(() => { });
-    }, []);
 
     // Manual IntersectionObserver — replays every time footer enters view
     useEffect(() => {
@@ -83,9 +75,9 @@ export function Footer({ locale }: { locale: string }) {
         : "";
 
     const socialLinks = [
-        { icon: Instagram, href: profile?.social_instagram || "https://instagram.com", label: "Instagram" },
+        { icon: Instagram, href: profile?.social_instagram || "https://www.instagram.com/thariimb", label: "Instagram" },
         { icon: Youtube, href: profile?.social_youtube || "https://youtube.com/@ThariiMB", label: "Youtube" },
-        { icon: () => <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>, href: profile?.social_twitter || "https://x.com", label: "X" },
+        { icon: () => <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>, href: profile?.social_twitter || "https://x.com/thariimb", label: "X" },
     ];
 
     return (

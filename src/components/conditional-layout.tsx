@@ -2,16 +2,17 @@
 
 import { usePathname } from "next/navigation";
 import { Header } from "@/components/header";
-import { Footer } from "@/components/footer";
+import { Footer, type FooterProfile } from "@/components/footer";
 import { MaintenancePage } from "@/components/maintenance-page";
 
 interface ConditionalLayoutProps {
     locale: string;
     children: React.ReactNode;
     maintenanceMode?: boolean;
+    profile?: FooterProfile | null;
 }
 
-export function ConditionalLayout({ locale, children, maintenanceMode = false }: ConditionalLayoutProps) {
+export function ConditionalLayout({ locale, children, maintenanceMode = false, profile = null }: ConditionalLayoutProps) {
     const pathname = usePathname();
     const isAdminRoute = pathname.includes("/admin");
 
@@ -30,7 +31,7 @@ export function ConditionalLayout({ locale, children, maintenanceMode = false }:
             <main className="flex-1 w-full">
                 {children}
             </main>
-            <Footer locale={locale} />
+            <Footer locale={locale} profile={profile} />
         </div>
     );
 }

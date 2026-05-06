@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ConditionalLayout } from "@/components/conditional-layout";
 import { createServerSupabaseClient } from "@/lib/supabase";
 import { unstable_cache } from "next/cache";
+import { getProfile } from "@/lib/data";
 
 // Fonts
 const tajawal = Tajawal({
@@ -61,7 +62,10 @@ export default async function RootLayout({
 
     const messages = await getMessages();
     const dir = locale === 'ar' ? 'rtl' : 'ltr';
-    const maintenance = await isMaintenanceMode();
+    const [maintenance, profile] = await Promise.all([
+        isMaintenanceMode(),
+        getProfile(),
+    ]);
 
     return (
         <html lang={locale} dir={dir} suppressHydrationWarning>
@@ -75,7 +79,7 @@ export default async function RootLayout({
                         enableSystem
                         disableTransitionOnChange
                     >
-                        <ConditionalLayout locale={locale} maintenanceMode={maintenance}>
+                        <ConditionalLayout locale={locale} maintenanceMode={maintenance} profile={profile}>
                             {children}
                         </ConditionalLayout>
                         <Toaster />

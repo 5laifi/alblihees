@@ -32,10 +32,7 @@ export async function PUT(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Profile is used on many pages
-    revalidatePath("/[locale]", "page");
-    revalidatePath("/[locale]/about", "page");
-    revalidatePath("/[locale]/contact", "page");
-    revalidatePath("/[locale]/services", "page");
+    // Profile is used on many pages and in the layout footer
+    revalidatePath("/[locale]", "layout");
     return NextResponse.json(data);
 }
