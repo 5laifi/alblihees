@@ -4,7 +4,7 @@ import { Resend } from "resend";
 import crypto from "crypto";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "thari@ouraevents.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "Tharii@me.com";
 
 // Rate limiter for forgot-password
 const resetAttempts = new Map<string, { count: number; lastAttempt: number }>();

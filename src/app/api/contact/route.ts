@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase";
 import { Resend } from "resend";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const NOTIFY_EMAIL = process.env.ADMIN_EMAIL || "thari@ouraevents.com";
+const NOTIFY_EMAIL = process.env.ADMIN_EMAIL || "Tharii@me.com";
 
 // Simple in-memory rate limiter
 const contactAttempts = new Map<string, { count: number; lastAttempt: number }>();

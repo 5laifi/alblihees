@@ -98,7 +98,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 })}
             </nav>
 
-            <div className="p-4 border-t border-white/10">
+            <div className="p-4 border-t border-white/10 space-y-3">
+                <div className="flex items-center gap-2 px-2 text-xs text-gray-400">
+                    <Mail className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate" dir="ltr">Tharii@me.com</span>
+                </div>
                 <Button
                     variant="ghost"
                     className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-400/10 gap-3"
