@@ -29,7 +29,7 @@ export default function InvoicePrintPage() {
     const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
     const [invoice, setInvoice] = useState<SavedInvoice | null>(null);
     const [settings, setSettings] = useState<InvoiceSettings>(DEFAULT_INVOICE_SETTINGS);
-    const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+    const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
     const [exporting, setExporting] = useState(false);
     const docRef = useRef<HTMLDivElement>(null);
 
@@ -45,15 +45,19 @@ export default function InvoicePrintPage() {
                 const inv = await invRes.json().catch(() => ({}));
                 const conf = await setRes.json().catch(() => ({}));
                 if (cancelled) return;
-                if (!invRes.ok || !inv.invoice) {
+                if (invRes.status === 404) {
                     setState("missing");
+                    return;
+                }
+                if (!invRes.ok || !inv.invoice) {
+                    setState("error");
                     return;
                 }
                 setInvoice(inv.invoice);
                 if (conf.settings) setSettings(conf.settings);
                 setState("ready");
             } catch {
-                if (!cancelled) setState("missing");
+                if (!cancelled) setState("error");
             }
         })();
         return () => {
@@ -82,6 +86,14 @@ export default function InvoicePrintPage() {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+
+    if (state === "error") {
+        return (
+            <div dir="rtl" className="min-h-screen flex items-center justify-center text-muted-foreground">
+                تعذر تحميل المستند. حدّث الصفحة أو سجّل الدخول من جديد.
             </div>
         );
     }

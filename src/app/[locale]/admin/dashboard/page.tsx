@@ -29,7 +29,6 @@ import {
     CheckCircle2,
     AlertCircle,
     Loader2,
-    ReceiptText,
     Circle,
 } from "lucide-react";
 
@@ -213,8 +212,12 @@ export default function AdminDashboardPage() {
         };
     }, []);
 
+    // Bumped by Refresh so the self-loading invoices card reloads with everything else
+    const [invoicesRefreshKey, setInvoicesRefreshKey] = useState(0);
+
     async function handleRefresh() {
         setRefreshing(true);
+        setInvoicesRefreshKey((k) => k + 1);
         const result = await fetchDashboard();
         setData(result.data);
         setState(result.state);
@@ -280,7 +283,6 @@ export default function AdminDashboardPage() {
         { label: "Edit profile & bio", description: "Name, titles, contact and socials", href: "/admin/content", icon: FileText },
         { label: "Upload media", description: "Add a video, audio clip or photo", href: "/admin/media", icon: Upload },
         { label: "Add a service", description: "Create a new public offering", href: "/admin/services", icon: Plus },
-        { label: "New invoice or quotation", description: "Create, export and track payment", href: "/admin/invoices", icon: ReceiptText },
         { label: "Add a partner", description: "Channels and organizations", href: "/admin/partners", icon: Users },
         { label: "Update experience", description: "Stats and career timeline", href: "/admin/experience", icon: Award },
         { label: "Site settings", description: "Maintenance, hero video, password", href: "/admin/settings", icon: Settings },
@@ -368,7 +370,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Invoices & quotations */}
-            <DashboardInvoicesCard />
+            <DashboardInvoicesCard refreshKey={invoicesRefreshKey} />
 
             {/* Main grid */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

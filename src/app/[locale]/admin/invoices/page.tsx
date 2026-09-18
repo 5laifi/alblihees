@@ -43,8 +43,8 @@ export default function AdminInvoicesPage() {
             setStorage(list.storage || null);
             if (conf.settings) setSettings(conf.settings);
 
-            if (list.storage === "supabase") {
-                // Answers 404 in production, where the preview file is never used.
+            // The preview file only exists in development; the route answers 404 in production.
+            if (list.storage === "supabase" && process.env.NODE_ENV !== "production") {
                 const preview = await fetch("/api/admin/invoices/import-local")
                     .then((res) => (res.ok ? res.json() : null))
                     .catch(() => null);
@@ -98,7 +98,8 @@ export default function AdminInvoicesPage() {
     ];
 
     return (
-        <div dir="rtl" lang="ar" className="text-right">
+        // font-sans = Tajawal first: the admin shell prefers Inter, whose fallback would render Arabic in Arial
+        <div dir="rtl" lang="ar" className="text-right font-sans">
             <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-primary mb-2">الفواتير وعروض الأسعار</h1>

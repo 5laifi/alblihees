@@ -41,7 +41,7 @@ function summarize(list: SavedInvoice[]): InvoiceSummary {
     };
 }
 
-export function DashboardInvoicesCard({ className }: { className?: string }) {
+export function DashboardInvoicesCard({ className, refreshKey = 0 }: { className?: string; refreshKey?: number }) {
     const [summary, setSummary] = useState<InvoiceSummary | null>(null);
     const [state, setState] = useState<"loading" | "ready" | "setup" | "error">("loading");
 
@@ -63,7 +63,7 @@ export function DashboardInvoicesCard({ className }: { className?: string }) {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [refreshKey]);
 
     const outstandingText =
         summary && Object.keys(summary.outstanding).length > 0

@@ -25,7 +25,11 @@ const settingsSchema = z.object({
     liaisonPhone: z.string().trim().max(40),
     showSignature: z.boolean(),
     signatureUrl: safeUrl,
-    qrUrl: z.string().trim().max(500),
+    qrUrl: z
+        .string()
+        .trim()
+        .max(300)
+        .refine((value) => value === "" || /^https?:\/\//i.test(value), "Invalid URL"),
     quotationTerms: z.string().trim().max(600),
     invoiceTerms: z.string().trim().max(600),
     numerals: z.enum(["arabic", "latin"]),

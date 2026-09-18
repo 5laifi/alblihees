@@ -19,7 +19,6 @@ import {
     calcTotals,
     round3,
     statusForPayment,
-    todayIso,
     type InvoiceData,
     type InvoiceSettings,
     type NewInvoiceInput,
@@ -48,6 +47,12 @@ const DATA_FILE = path.join(process.cwd(), ".data", "invoices.json");
 interface LocalData {
     invoices: SavedInvoice[];
     settings: Partial<InvoiceSettings>;
+}
+
+// Server clocks run in UTC; documents are dated by the business day in Kuwait
+// (en-CA formats as YYYY-MM-DD).
+function businessToday(): string {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait" }).format(new Date());
 }
 
 function preferredBackend(): StorageBackend {
@@ -178,9 +183,13 @@ async function run<T>(
     } catch (error) {
         if (isMissingTable(error)) {
             if (isDev) return { result: await withLocalLock(viaLocal), backend: "local" };
+            console.error("[invoices] storage not usable (missing table):", error);
             throw new SetupRequiredError();
         }
-        if (isPermissionDenied(error)) throw new SetupRequiredError();
+        if (isPermissionDenied(error)) {
+            console.error("[invoices] storage not usable (permission denied):", error);
+            throw new SetupRequiredError();
+        }
         throw error;
     }
 }
@@ -249,7 +258,7 @@ export async function convertQuotationToInvoice(id: string): Promise<SavedInvoic
     return insertInvoice({
         documentType: "invoice",
         docNumber: source.docNumber,
-        issueDate: todayIso(),
+        issueDate: businessToday(),
         category: source.category,
         projectName: source.projectName,
         clientName: source.clientName,

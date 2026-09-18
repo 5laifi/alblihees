@@ -228,7 +228,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Unread badge for the inbox link. Re-checked on every route change so it
     // stays accurate after the admin reads messages.
     useEffect(() => {
-        if (isPublicAdminPage || authState !== "authenticated") return;
+        if (isPublicAdminPage || isPrintPage || authState !== "authenticated") return;
         let cancelled = false;
         fetch("/api/admin/contacts")
             .then((r) => (r.ok ? r.json() : []))
@@ -240,7 +240,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return () => {
             cancelled = true;
         };
-    }, [pathname, authState, isPublicAdminPage]);
+    }, [pathname, authState, isPublicAdminPage, isPrintPage]);
 
     const currentItem = ALL_ITEMS.find((item) => pathname.startsWith(item.href));
     const pageTitle = currentItem?.label ?? "Admin";

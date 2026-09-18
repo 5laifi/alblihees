@@ -25,7 +25,14 @@ const itemSchema = z.object({
 // never be set or changed from the browser (unknown keys are stripped by zod).
 const invoiceSchema = z.object({
     documentType: z.enum(["invoice", "quotation"]),
-    issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    issueDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        // a real calendar day (2026-02-31 would otherwise reach Postgres and fail there)
+        .refine((v) => {
+            const d = new Date(`${v}T00:00:00Z`);
+            return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+        }, "Invalid date"),
     category: z.string().trim().max(120),
     projectName: z.string().trim().min(1).max(300),
     clientName: z.string().trim().min(1).max(300),
