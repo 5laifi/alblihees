@@ -12,6 +12,9 @@
 -- The editor will warn that the query is destructive (it drops policies and
 -- deletes rows): that is expected, confirm it. On success the result is one row
 -- saying "Lockdown applied". An error means nothing was changed.
+-- Always run the WHOLE file, never a selected part of it.
+-- If the error says "canceling statement due to lock timeout": the database was
+-- busy, nothing was changed, wait a minute and run the whole file again.
 --
 -- End state for the anon / publishable key:
 --   services, experience_stats, experience_timeline,
@@ -25,8 +28,9 @@
 BEGIN;
 
 -- Policy changes need a brief exclusive lock on each table. If something else
--- holds a lock, give up after 5 seconds (nothing changed, just run it again)
--- rather than making the live site's reads queue up behind this script.
+-- holds a lock, give up after 5 seconds per table (nothing changed, just run it
+-- again) rather than letting the live site's reads queue behind this script
+-- for as long as the editor allows.
 SET LOCAL lock_timeout = '5s';
 
 -- 0. Safety interlock: refuse to run until the new code is proven live.
@@ -175,4 +179,14 @@ COMMIT;
 NOTIFY pgrst, 'reload schema';
 
 -- Now run 20260918_03_verify.sql and compare the output with the table in it.
-SELECT 'Lockdown applied. Now run 20260918_03_verify.sql' AS result;
+-- Derived from the real state, so it cannot claim success after a failure.
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename IN ('services', 'experience_stats', 'experience_timeline', 'organizations',
+                            'media_items', 'profile', 'contact_submissions', 'site_settings', 'admin_secrets')
+          AND (cmd IN ('ALL', 'UPDATE', 'DELETE') OR policyname LIKE 'Anon manage%')
+    ) THEN 'NOT applied: open policies are still present. Run the whole file again.'
+    ELSE 'Lockdown applied. Now run 20260918_03_verify.sql'
+END AS result;

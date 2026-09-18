@@ -38,7 +38,12 @@ export default function AdminLoginPage() {
                 router.push("/admin/dashboard");
                 router.refresh();
             } else {
-                setError("Invalid password");
+                // Only 401 means a wrong password. Anything else (rate limit, server
+                // not configured) must not send the admin hunting for a typo.
+                const data = await res.json().catch(() => null);
+                if (res.status === 401) setError("Invalid password");
+                else if (res.status === 429) setError(data?.error || "Too many attempts. Please wait a minute.");
+                else setError("Server error. The site may not be fully configured yet: check the server logs.");
             }
         } catch (err) {
             setError("Something went wrong");

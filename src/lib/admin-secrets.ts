@@ -30,10 +30,19 @@ export async function getAdminSecret(supabase: SupabaseClient, key: AdminSecretK
     return data?.value || null;
 }
 
-export async function setAdminSecret(supabase: SupabaseClient, key: AdminSecretKey, value: string): Promise<void> {
+// keepExisting: insert only if the secret is not set yet (never overwrite).
+export async function setAdminSecret(
+    supabase: SupabaseClient,
+    key: AdminSecretKey,
+    value: string,
+    options: { keepExisting?: boolean } = {}
+): Promise<void> {
     const { error } = await supabase
         .from("admin_secrets")
-        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+        .upsert(
+            { key, value, updated_at: new Date().toISOString() },
+            { onConflict: "key", ignoreDuplicates: options.keepExisting === true }
+        );
 
     if (error) {
         throw new Error(`Failed to save admin secret "${key}": ${error.message}`);

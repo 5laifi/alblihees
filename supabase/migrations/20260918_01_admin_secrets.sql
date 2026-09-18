@@ -31,7 +31,11 @@ GRANT ALL ON public.admin_secrets TO service_role;
 -- the first admin login after the new code is deployed stores a fresh hash of
 -- the ADMIN_PASSWORD environment variable here (first-time setup in
 -- src/app/api/auth/login/route.ts). Log in with that password once, then change
--- it from Admin > Settings.
+-- it from Admin > Settings. From then on ADMIN_PASSWORD is no longer accepted.
+--
+-- Forgot the admin password later? Run this here, then log in with
+-- ADMIN_PASSWORD again:
+--   DELETE FROM public.admin_secrets WHERE key = 'admin_password_hash';
 
 COMMIT;
 

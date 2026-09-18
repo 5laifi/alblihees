@@ -49,6 +49,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Password is required" }, { status: 400 });
         }
 
+        // Configuration check first, so nothing is written before a login can complete
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET environment variable is not set");
+            return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+        }
+
         const supabase = createAdminSupabaseClient();
 
         // Get the password hash from the database. This throws on a database error,
@@ -77,8 +84,10 @@ export async function POST(request: Request) {
             // a hash in admin_secrets must mean "an admin logged in through this code".
             // Throws if it cannot be stored, so the ENV password is only ever accepted
             // when first-time setup actually completes.
+            // keepExisting: if a hash appeared in the meantime (two first logins at
+            // once), first-time setup must never replace it.
             if (isValid) {
-                await setAdminSecret(supabase, "admin_password_hash", hash);
+                await setAdminSecret(supabase, "admin_password_hash", hash, { keepExisting: true });
             }
         }
 
@@ -87,11 +96,6 @@ export async function POST(request: Request) {
         }
 
         // Create a session token
-        const jwtSecret = process.env.JWT_SECRET;
-        if (!jwtSecret) {
-            console.error("JWT_SECRET environment variable is not set");
-            return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
-        }
         const secret = new TextEncoder().encode(jwtSecret);
 
         const token = await new SignJWT({ role: "admin" })
