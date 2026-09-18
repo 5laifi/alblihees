@@ -227,9 +227,11 @@ export default function AdminInvoicesPage() {
                                 hint={
                                     summary.partial > 0
                                         ? `${summary.partial} partially paid`
-                                        : summary.invoices > 0
-                                          ? "All invoices settled"
-                                          : undefined
+                                        : summary.unpaid > 0
+                                          ? `${summary.unpaid} unpaid`
+                                          : summary.invoices > 0
+                                            ? "All invoices settled"
+                                            : undefined
                                 }
                             />
                             <StatTile

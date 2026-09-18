@@ -29,11 +29,14 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
     const [mode, setMode] = useState<PaymentMode>("add");
     const [amount, setAmount] = useState("");
     const [saving, setSaving] = useState(false);
+    // An overpayment needs a second Save press; any edit to the amount or mode resets this.
+    const [overAcknowledged, setOverAcknowledged] = useState(false);
 
     useEffect(() => {
         if (open) {
             setAmount("");
             setMode("add");
+            setOverAcknowledged(false);
         }
     }, [open, invoice?.id]);
 
@@ -57,8 +60,13 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
             toast.error("Enter a valid amount.");
             return;
         }
-        // Overpaying is allowed: the inline note has already pointed it out.
         const newPaid = round3(mode === "add" ? paid + value : value);
+        // Overpaying is allowed, but only on a second Save press so a typo
+        // (5000 instead of 500) cannot slip through.
+        if (newPaid > round3(total) && !overAcknowledged) {
+            setOverAcknowledged(true);
+            return;
+        }
 
         setSaving(true);
         try {
@@ -99,12 +107,14 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                 </div>
 
                 <SegmentedTabs
+                    variant="radio"
                     aria-label="Payment mode"
                     value={mode}
                     options={MODE_OPTIONS}
                     onChange={(key) => {
                         setMode(key);
                         setAmount(key === "set" ? String(paid) : "");
+                        setOverAcknowledged(false);
                     }}
                 />
 
@@ -119,12 +129,23 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                             inputMode="decimal"
                             placeholder="0"
                             value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            onChange={(e) => {
+                                setAmount(e.target.value);
+                                setOverAcknowledged(false);
+                            }}
                             onKeyDown={(e) => e.key === "Enter" && submit()}
                             autoFocus
                         />
                         {mode === "add" && remaining > 0 ? (
-                            <Button type="button" variant="outline" className="shrink-0" onClick={() => setAmount(String(remaining))}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="shrink-0"
+                                onClick={() => {
+                                    setAmount(String(remaining));
+                                    setOverAcknowledged(false);
+                                }}
+                            >
                                 Pay remaining
                             </Button>
                         ) : null}
@@ -132,7 +153,10 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                     {overBy > 0 && (
                         <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                            <span>This exceeds the invoice total by {money(overBy)}.</span>
+                            <span>
+                                This exceeds the invoice total by {money(overBy)}.
+                                {overAcknowledged ? " Press Save again to record it anyway." : ""}
+                            </span>
                         </p>
                     )}
                 </div>
@@ -143,7 +167,7 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                     </Button>
                     <Button onClick={submit} disabled={saving}>
                         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        Save
+                        {overBy > 0 && overAcknowledged ? "Save anyway" : "Save"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

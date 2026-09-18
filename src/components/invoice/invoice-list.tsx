@@ -236,16 +236,16 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                 </div>
             ) : (
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm animate-in fade-in-0 duration-200">
-                    {/* md and up: table */}
-                    <div className="hidden md:block">
+                    {/* lg and up: table (below that the sidebar leaves too little width for six columns) */}
+                    <div className="hidden overflow-x-auto lg:block">
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                                    <TableHead className="w-24 pl-5 pr-4">#</TableHead>
+                                    <TableHead className="w-16 whitespace-nowrap pl-5 pr-4">#</TableHead>
                                     <TableHead className="px-4">Client / project</TableHead>
-                                    <TableHead className="w-36 px-4">Date</TableHead>
-                                    <TableHead className="w-36 px-4 text-right">Total</TableHead>
-                                    <TableHead className="w-44 px-4">{isInvoice ? "Payment" : "Items"}</TableHead>
+                                    <TableHead className="whitespace-nowrap px-4">Date</TableHead>
+                                    <TableHead className="whitespace-nowrap px-4 text-right">Total</TableHead>
+                                    <TableHead className="whitespace-nowrap px-4">{isInvoice ? "Payment" : "Items"}</TableHead>
                                     <TableHead className="w-14 pl-4 pr-5">
                                         <span className="sr-only">Actions</span>
                                     </TableHead>
@@ -260,8 +260,8 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                                             <TableCell className="py-3 pl-5 pr-4 font-medium tabular-nums">#{inv.docNumber}</TableCell>
                                             <TableCell className="px-4 py-3">
                                                 <div className="max-w-[28rem]">
-                                                    <p className="truncate font-medium">
-                                                        <bdi>{inv.clientName || "—"}</bdi>
+                                                    <p dir="auto" className="truncate text-left font-medium">
+                                                        {inv.clientName || "—"}
                                                     </p>
                                                     {inv.projectName && (
                                                         <p dir="auto" className="truncate text-left text-xs text-muted-foreground">
@@ -300,8 +300,8 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                         </Table>
                     </div>
 
-                    {/* below md: stacked rows with the same information */}
-                    <ul className="md:hidden">
+                    {/* below lg: stacked rows with the same information */}
+                    <ul className="lg:hidden">
                         {visible.map((inv) => {
                             const { total } = calcTotals(inv.items, inv.discount);
                             const status = PAYMENT_STATUS_META[inv.paymentStatus];
@@ -310,8 +310,8 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-baseline gap-2">
                                             <span className="shrink-0 text-sm font-medium tabular-nums">#{inv.docNumber}</span>
-                                            <p className="min-w-0 truncate text-sm font-medium">
-                                                <bdi>{inv.clientName || "—"}</bdi>
+                                            <p dir="auto" className="min-w-0 truncate text-left text-sm font-medium">
+                                                {inv.clientName || "—"}
                                             </p>
                                         </div>
                                         {inv.projectName && (

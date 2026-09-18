@@ -48,11 +48,13 @@ export function DashboardInvoicesCard({ className, refreshKey = 0 }: { className
     const awaiting = summary ? summary.unpaid + summary.partial : 0;
     const hasOutstanding = summary ? Object.values(summary.outstanding).some((amount) => amount > 0) : false;
 
+    const multiCurrency = summary ? Object.keys(summary.outstanding).length > 1 : false;
     const stats = summary
         ? [
-              { label: "Outstanding", value: formatAmountMap(summary.outstanding), warn: hasOutstanding },
-              { label: "Awaiting payment", value: String(awaiting), warn: awaiting > 0 },
-              { label: "Quotations", value: String(summary.quotations), warn: false },
+              { label: "Outstanding", value: formatAmountMap(summary.outstanding), warn: hasOutstanding, small: multiCurrency },
+              { label: "Awaiting payment", value: String(awaiting), warn: awaiting > 0, small: false },
+              { label: "Invoices", value: String(summary.invoices), warn: false, small: false },
+              { label: "Quotations", value: String(summary.quotations), warn: false, small: false },
           ]
         : [];
 
@@ -104,13 +106,15 @@ export function DashboardInvoicesCard({ className, refreshKey = 0 }: { className
 
             {state === "ready" && summary && summary.recent.length > 0 && (
                 <>
-                    <div className="grid grid-cols-3 divide-x border-b">
+                    {/* gap-px on a border-coloured background draws the hairlines in both directions */}
+                    <div className="grid grid-cols-2 gap-px border-b bg-border sm:grid-cols-4">
                         {stats.map((stat) => (
-                            <div key={stat.label} className="min-w-0 px-5 py-3">
+                            <div key={stat.label} className="min-w-0 bg-card px-5 py-3">
                                 <p className="text-xs text-muted-foreground">{stat.label}</p>
                                 <p
                                     className={cn(
-                                        "mt-0.5 truncate text-lg font-semibold tabular-nums",
+                                        "mt-0.5 break-words font-semibold leading-tight tabular-nums",
+                                        stat.small ? "text-sm" : "text-lg",
                                         stat.warn && "text-amber-600 dark:text-amber-400"
                                     )}
                                 >
@@ -125,19 +129,23 @@ export function DashboardInvoicesCard({ className, refreshKey = 0 }: { className
                             <li key={doc.id}>
                                 <Link
                                     href="/admin/invoices"
-                                    className="flex items-center gap-4 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
+                                    className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
                                 >
-                                    <span className="whitespace-nowrap font-medium tabular-nums">
-                                        {DOC_LABELS_EN[doc.documentType]} #{doc.docNumber}
+                                    <span className="flex min-w-0 flex-1 items-center gap-3">
+                                        <span className="whitespace-nowrap font-medium tabular-nums">
+                                            {DOC_LABELS_EN[doc.documentType]} #{doc.docNumber}
+                                        </span>
+                                        <span dir="auto" className="min-w-0 truncate text-left text-muted-foreground">
+                                            {doc.clientName}
+                                        </span>
                                     </span>
-                                    <bdi className="truncate text-muted-foreground">{doc.clientName}</bdi>
-                                    <span className="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
+                                    <span className="ml-auto flex items-center gap-3 whitespace-nowrap">
                                         {doc.documentType === "invoice" && (
                                             <StatusPill tone={PAYMENT_STATUS_META[doc.paymentStatus].tone}>
                                                 {PAYMENT_STATUS_META[doc.paymentStatus].label}
                                             </StatusPill>
                                         )}
-                                        <span className="text-xs text-muted-foreground">{formatDateEn(doc.issueDate)}</span>
+                                        <span className="hidden text-xs text-muted-foreground sm:inline">{formatDateEn(doc.issueDate)}</span>
                                         <span className="font-medium tabular-nums">
                                             {formatAmount(calcTotals(doc.items, doc.discount).total, doc.currency)}
                                         </span>

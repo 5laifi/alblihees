@@ -252,8 +252,14 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                         >
                                             {isDone ? <Check className="h-3.5 w-3.5" /> : number}
                                         </span>
-                                        {/* On phones only the current step's label fits; the others show as numbered circles. */}
-                                        <span className={cn("whitespace-nowrap text-sm", isCurrent ? "font-medium" : "hidden text-muted-foreground sm:inline")}>
+                                        {/* Only the current step's label is shown where the stepper is narrow: on phones,
+                                            and at lg where the form shares the row with the live preview. */}
+                                        <span
+                                            className={cn(
+                                                "whitespace-nowrap text-sm",
+                                                isCurrent ? "font-medium" : "hidden text-muted-foreground sm:inline lg:hidden xl:inline"
+                                            )}
+                                        >
                                             {s.title}
                                         </span>
                                     </button>
@@ -277,6 +283,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 <div className="space-y-2">
                                     <Label>Document type</Label>
                                     <SegmentedTabs<DocumentType>
+                                        variant="radio"
                                         aria-label="Document type"
                                         value={data.documentType}
                                         onChange={(v) => update("documentType", v)}
@@ -505,6 +512,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 <div className="space-y-3">
                                     <Label>Discount</Label>
                                     <SegmentedTabs<"percentage" | "amount">
+                                        variant="radio"
                                         aria-label="Discount mode"
                                         value={discountMode}
                                         onChange={(mode) => {

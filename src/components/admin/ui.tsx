@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, KeyboardEvent, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -142,22 +142,51 @@ export interface SegmentedOption<T extends string> {
     icon?: IconType;
 }
 
-/** Segmented control / tab strip, the same look as the contact-messages filters. */
+/**
+ * Segmented control, the same look as the contact-messages filters.
+ * variant "tabs" (default) switches between page sections and exposes the
+ * tabs keyboard model (arrow keys, Home, End); variant "radio" is a
+ * mode switch inside a form and is announced as a radio group.
+ */
 export function SegmentedTabs<T extends string>({
     value,
     onChange,
     options,
     className,
+    variant = "tabs",
     "aria-label": ariaLabel,
 }: {
     value: T;
     onChange: (value: T) => void;
     options: SegmentedOption<T>[];
     className?: string;
+    variant?: "tabs" | "radio";
     "aria-label"?: string;
 }) {
+    const isRadio = variant === "radio";
+
+    function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+        const index = options.findIndex((option) => option.value === value);
+        let next = index;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % options.length;
+        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + options.length) % options.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = options.length - 1;
+        else return;
+        event.preventDefault();
+        const target = options[next];
+        if (!target) return;
+        if (target.value !== value) onChange(target.value);
+        event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+    }
+
     return (
-        <div role="tablist" aria-label={ariaLabel} className={cn("inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted/60 p-1", className)}>
+        <div
+            role={isRadio ? "radiogroup" : "tablist"}
+            aria-label={ariaLabel}
+            onKeyDown={onKeyDown}
+            className={cn("inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted/60 p-1", className)}
+        >
             {options.map((option) => {
                 const active = option.value === value;
                 const Icon = option.icon;
@@ -165,8 +194,10 @@ export function SegmentedTabs<T extends string>({
                     <button
                         key={option.value}
                         type="button"
-                        role="tab"
-                        aria-selected={active}
+                        role={isRadio ? "radio" : "tab"}
+                        aria-checked={isRadio ? active : undefined}
+                        aria-selected={isRadio ? undefined : active}
+                        tabIndex={active ? 0 : -1}
                         onClick={() => onChange(option.value)}
                         className={cn(
                             "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
