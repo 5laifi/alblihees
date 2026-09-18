@@ -19,7 +19,6 @@ import {
     Phone,
     Clock,
     User,
-    ChevronDown,
     Inbox,
     CheckCheck,
     Filter,
@@ -244,7 +243,7 @@ export default function AdminContactsPage() {
                                         : ""
                                     }`}
                             >
-                                <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/30 transition-colors [&[data-state=open]>div>.chevron-icon]:rotate-180">
+                                <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/30 transition-colors">
                                     <div className="flex items-center justify-between w-full pr-2">
                                         <div className="flex items-center gap-4 min-w-0">
                                             {/* Unread indicator */}
@@ -287,14 +286,11 @@ export default function AdminContactsPage() {
                                         </div>
 
                                         {/* Right side: date */}
-                                        <div className="flex items-center gap-3 shrink-0 ml-4">
-                                            <span className="text-xs text-muted-foreground hidden sm:block">
-                                                {formatDate(
-                                                    contact.created_at
-                                                )}
-                                            </span>
-                                            <ChevronDown className="h-4 w-4 text-muted-foreground chevron-icon transition-transform duration-200" />
-                                        </div>
+                                        <span className="text-xs text-muted-foreground hidden sm:block shrink-0 ml-4">
+                                            {formatDate(
+                                                contact.created_at
+                                            )}
+                                        </span>
                                     </div>
                                 </AccordionTrigger>
 
