@@ -2,24 +2,31 @@
 
 import { useMemo, useState } from "react";
 import { useLocale } from "next-intl";
-import { motion } from "framer-motion";
-import { Banknote, Copy, Eye, FileOutput, FileText, Pencil, Printer, Search, Trash2 } from "lucide-react";
+import { Banknote, Copy, Eye, FileOutput, FileText, Loader2, MoreHorizontal, Pencil, Printer, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState, StatusPill } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-    DOC_LABELS,
-    STATUS_LABELS,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+    DOC_LABELS_EN,
+    DOC_LABELS_EN_PLURAL,
+    PAYMENT_STATUS_META,
     calcTotals,
-    formatDocDate,
-    formatMoney,
+    formatAmount,
+    formatDateEn,
     todayIso,
     type DocumentType,
     type InvoiceSettings,
     type NewInvoiceInput,
-    type PaymentStatus,
     type SavedInvoice,
 } from "@/lib/invoice-types";
 import { InvoiceDocument } from "./invoice-document";
@@ -34,16 +41,83 @@ interface InvoiceListProps {
     onChanged: () => void;
 }
 
-const STATUS_STYLES: Record<PaymentStatus, string> = {
-    unpaid: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-    partial: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-    paid: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
-};
-
 // A copy never carries the old number: the server gives it the next one.
 function toCopyPayload(inv: SavedInvoice): NewInvoiceInput {
     const { documentType, category, projectName, clientName, items, discount, currency, notes, template } = inv;
     return { documentType, issueDate: todayIso(), category, projectName, clientName, items, discount, currency, notes, template };
+}
+
+function itemsLabel(count: number): string {
+    return `${count} ${count === 1 ? "service" : "services"}`;
+}
+
+/** Instalments received so far are shown until the invoice is settled. */
+function showPaidLine(inv: SavedInvoice): boolean {
+    return inv.amountPaid > 0 && inv.paymentStatus !== "paid";
+}
+
+interface RowActionHandlers {
+    preview: (inv: SavedInvoice) => void;
+    print: (inv: SavedInvoice) => void;
+    edit: (inv: SavedInvoice) => void;
+    pay: (inv: SavedInvoice) => void;
+    convert: (inv: SavedInvoice) => void;
+    copy: (inv: SavedInvoice) => void;
+    requestDelete: (inv: SavedInvoice) => void;
+}
+
+/** The "…" menu on every row. Shared by the table and the stacked mobile rows. */
+function RowActions({
+    invoice,
+    documentType,
+    creating,
+    actions,
+}: {
+    invoice: SavedInvoice;
+    documentType: DocumentType;
+    creating: boolean;
+    actions: RowActionHandlers;
+}) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="sr-only">Actions</span>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onSelect={() => actions.preview(invoice)}>
+                    <Eye /> Preview
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => actions.print(invoice)}>
+                    <Printer /> Print / PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => actions.edit(invoice)}>
+                    <Pencil /> Edit
+                </DropdownMenuItem>
+                {documentType === "invoice" ? (
+                    <DropdownMenuItem onSelect={() => actions.pay(invoice)}>
+                        <Banknote /> Record payment
+                    </DropdownMenuItem>
+                ) : (
+                    <DropdownMenuItem disabled={creating} onSelect={() => actions.convert(invoice)}>
+                        <FileOutput /> Convert to invoice
+                    </DropdownMenuItem>
+                )}
+                <DropdownMenuItem disabled={creating} onSelect={() => actions.copy(invoice)}>
+                    <Copy /> Duplicate
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    className="text-red-600 focus:text-red-600 dark:text-red-400"
+                    onSelect={() => actions.requestDelete(invoice)}
+                >
+                    <Trash2 /> Delete
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 }
 
 export function InvoiceList({ documentType, invoices, settings, onEdit, onChanged }: InvoiceListProps) {
@@ -52,9 +126,13 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
     const [preview, setPreview] = useState<SavedInvoice | null>(null);
     const [paying, setPaying] = useState<SavedInvoice | null>(null);
     const [creating, setCreating] = useState(false);
+    // The document waiting for delete confirmation, and whether its request is in flight.
+    const [deleting, setDeleting] = useState<SavedInvoice | null>(null);
+    const [removing, setRemoving] = useState(false);
 
-    const label = DOC_LABELS[documentType];
-    const plural = documentType === "invoice" ? "فواتير" : "عروض أسعار";
+    const label = DOC_LABELS_EN[documentType];
+    const plural = DOC_LABELS_EN_PLURAL[documentType];
+    const isInvoice = documentType === "invoice";
 
     const visible = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -86,171 +164,241 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
             });
             const data = await res.json().catch(() => ({}));
             if (res.status === 409) {
-                toast.error(kind === "convert" ? "تم تحويل عرض السعر هذا إلى فاتورة من قبل" : "تعذر إعطاء رقم جديد، حاول مرة أخرى");
+                toast.error(
+                    kind === "convert"
+                        ? "This quotation was already converted to an invoice."
+                        : "Could not assign a new number, please try again."
+                );
                 return;
             }
             if (!res.ok || !data.invoice) throw new Error();
             toast.success(
                 kind === "convert"
-                    ? `تم إنشاء فاتورة رقم ${data.invoice.docNumber} من عرض السعر`
-                    : `تم إنشاء نسخة برقم ${data.invoice.docNumber}`
+                    ? `Invoice #${data.invoice.docNumber} created from the quotation`
+                    : `Copy created as #${data.invoice.docNumber}`
             );
             onChanged();
         } catch {
-            toast.error("تعذر تنفيذ العملية");
+            toast.error("Could not complete the action.");
         } finally {
             setCreating(false);
         }
     }
 
+    // Runs after the user confirms in the delete dialog. On failure the dialog
+    // stays open so they can retry or cancel.
     async function remove(inv: SavedInvoice) {
-        if (!confirm(`هل أنت متأكد من حذف ${label} رقم ${inv.docNumber}؟`)) return;
+        setRemoving(true);
         try {
             const res = await fetch(`/api/admin/invoices?id=${encodeURIComponent(inv.id)}`, { method: "DELETE" });
             if (!res.ok) throw new Error();
-            toast.success("تم الحذف");
+            toast.success("Deleted");
+            setDeleting(null);
             onChanged();
         } catch {
-            toast.error("تعذر الحذف");
+            toast.error("Could not delete.");
+        } finally {
+            setRemoving(false);
         }
     }
 
+    const actions: RowActionHandlers = {
+        preview: setPreview,
+        print: openPrint,
+        edit: onEdit,
+        pay: setPaying,
+        convert: (inv) => create({ convertFromId: inv.id }, "convert"),
+        copy: (inv) => create(toCopyPayload(inv), "copy"),
+        requestDelete: setDeleting,
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="ابحث باسم العميل أو المشروع أو رقم المستند..." value={query} onChange={(e) => setQuery(e.target.value)} className="pr-10" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                    dir="auto"
+                    placeholder="Search by client, project or number…"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="pl-9"
+                    aria-label={`Search ${plural.toLowerCase()}`}
+                />
             </div>
 
             {visible.length === 0 ? (
-                <Card className="p-12 text-center">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold mb-2">لا توجد {plural}</h3>
-                    <p className="text-muted-foreground">{query ? "جرّب كلمة بحث مختلفة" : `أنشئ أول ${label} من تبويب «إنشاء جديد»`}</p>
-                </Card>
+                <div className="rounded-xl border bg-card shadow-sm">
+                    <EmptyState
+                        icon={FileText}
+                        title={`No ${plural.toLowerCase()}`}
+                        description={query ? "Try a different search." : "Create the first one from the New document tab."}
+                    />
+                </div>
             ) : (
-                <div className="grid gap-4">
-                    {visible.map((inv, index) => {
-                        const { total } = calcTotals(inv.items, inv.discount);
-                        return (
-                            <motion.div key={inv.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index, 8) * 0.04 }}>
-                                <Card className="p-5 hover:shadow-lg transition-shadow">
-                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-[#78B7D0]/20 shrink-0">
-                                                    <FileText className="h-5 w-5 text-[#021526] dark:text-[#78B7D0]" />
+                <div className="overflow-hidden rounded-xl border bg-card shadow-sm animate-in fade-in-0 duration-200">
+                    {/* md and up: table */}
+                    <div className="hidden md:block">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                                    <TableHead className="w-24 pl-5 pr-4">#</TableHead>
+                                    <TableHead className="px-4">Client / project</TableHead>
+                                    <TableHead className="w-36 px-4">Date</TableHead>
+                                    <TableHead className="w-36 px-4 text-right">Total</TableHead>
+                                    <TableHead className="w-44 px-4">{isInvoice ? "Payment" : "Items"}</TableHead>
+                                    <TableHead className="w-14 pl-4 pr-5">
+                                        <span className="sr-only">Actions</span>
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {visible.map((inv) => {
+                                    const { total } = calcTotals(inv.items, inv.discount);
+                                    const status = PAYMENT_STATUS_META[inv.paymentStatus];
+                                    return (
+                                        <TableRow key={inv.id}>
+                                            <TableCell className="py-3 pl-5 pr-4 font-medium tabular-nums">#{inv.docNumber}</TableCell>
+                                            <TableCell className="px-4 py-3">
+                                                <div className="max-w-[28rem]">
+                                                    <p className="truncate font-medium">
+                                                        <bdi>{inv.clientName || "—"}</bdi>
+                                                    </p>
+                                                    {inv.projectName && (
+                                                        <p dir="auto" className="truncate text-left text-xs text-muted-foreground">
+                                                            {inv.projectName}
+                                                        </p>
+                                                    )}
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <h3 className="font-semibold text-lg">
-                                                        {label} <span dir="ltr">#{inv.docNumber}</span>
-                                                    </h3>
-                                                    <p className="text-sm text-muted-foreground truncate"><bdi>{inv.clientName}</bdi></p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                <Field label="المشروع" value={inv.projectName} />
-                                                <Field label="التاريخ" value={formatDocDate(inv.issueDate)} ltr />
-                                                <Field label="الإجمالي" value={formatMoney(total, inv.currency, "latin")} strong />
-                                                {documentType === "invoice" ? (
-                                                    <div>
-                                                        <p className="text-xs text-muted-foreground mb-1">حالة الدفع</p>
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[inv.paymentStatus]}`}>{STATUS_LABELS[inv.paymentStatus]}</span>
-                                                        {inv.amountPaid > 0 && inv.paymentStatus !== "paid" ? (
-                                                            <p className="text-xs text-muted-foreground mt-1.5">المدفوع: {formatMoney(inv.amountPaid, inv.currency, "latin")}</p>
-                                                        ) : null}
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                                                {formatDateEn(inv.issueDate)}
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
+                                                {formatAmount(total, inv.currency)}
+                                            </TableCell>
+                                            <TableCell className="px-4 py-3">
+                                                {isInvoice ? (
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                                                        {showPaidLine(inv) && (
+                                                            <span className="text-xs tabular-nums text-muted-foreground">
+                                                                Paid {formatAmount(inv.amountPaid, inv.currency)}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ) : (
-                                                    <Field label="عدد الخدمات" value={String(inv.items.length)} />
+                                                    <span className="text-muted-foreground">{itemsLabel(inv.items.length)}</span>
                                                 )}
-                                            </div>
-                                        </div>
+                                            </TableCell>
+                                            <TableCell className="py-3 pl-4 pr-5 text-right">
+                                                <RowActions invoice={inv} documentType={documentType} creating={creating} actions={actions} />
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </div>
 
-                                        <div className="flex flex-wrap gap-2 lg:max-w-[230px] lg:justify-end">
-                                            {documentType === "invoice" ? (
-                                                <IconButton title="تسجيل دفعة" onClick={() => setPaying(inv)}>
-                                                    <Banknote className="h-4 w-4" />
-                                                </IconButton>
-                                            ) : (
-                                                <IconButton
-                                                    title="تحويل إلى فاتورة"
-                                                    onClick={() => create({ convertFromId: inv.id }, "convert")}
-                                                >
-                                                    <FileOutput className="h-4 w-4" />
-                                                </IconButton>
-                                            )}
-                                            <IconButton title="معاينة" onClick={() => setPreview(inv)}>
-                                                <Eye className="h-4 w-4" />
-                                            </IconButton>
-                                            <IconButton title="طباعة / PDF" onClick={() => openPrint(inv)}>
-                                                <Printer className="h-4 w-4" />
-                                            </IconButton>
-                                            <IconButton title="تعديل" onClick={() => onEdit(inv)}>
-                                                <Pencil className="h-4 w-4" />
-                                            </IconButton>
-                                            <IconButton
-                                                title="نسخ برقم جديد"
-                                                onClick={() => create(toCopyPayload(inv), "copy")}
-                                            >
-                                                <Copy className="h-4 w-4" />
-                                            </IconButton>
-                                            <IconButton title="حذف" onClick={() => remove(inv)} danger>
-                                                <Trash2 className="h-4 w-4" />
-                                            </IconButton>
+                    {/* below md: stacked rows with the same information */}
+                    <ul className="md:hidden">
+                        {visible.map((inv) => {
+                            const { total } = calcTotals(inv.items, inv.discount);
+                            const status = PAYMENT_STATUS_META[inv.paymentStatus];
+                            return (
+                                <li key={inv.id} className="flex items-start justify-between gap-3 border-b p-4 last:border-b-0">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="shrink-0 text-sm font-medium tabular-nums">#{inv.docNumber}</span>
+                                            <p className="min-w-0 truncate text-sm font-medium">
+                                                <bdi>{inv.clientName || "—"}</bdi>
+                                            </p>
                                         </div>
+                                        {inv.projectName && (
+                                            <p dir="auto" className="mt-0.5 truncate text-left text-xs text-muted-foreground">
+                                                {inv.projectName}
+                                            </p>
+                                        )}
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                                            <span className="whitespace-nowrap">{formatDateEn(inv.issueDate)}</span>
+                                            <span className="whitespace-nowrap font-semibold tabular-nums text-foreground">
+                                                {formatAmount(total, inv.currency)}
+                                            </span>
+                                            {isInvoice ? (
+                                                <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                                            ) : (
+                                                <span>{itemsLabel(inv.items.length)}</span>
+                                            )}
+                                        </div>
+                                        {isInvoice && showPaidLine(inv) && (
+                                            <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
+                                                Paid {formatAmount(inv.amountPaid, inv.currency)}
+                                            </p>
+                                        )}
                                     </div>
-                                </Card>
-                            </motion.div>
-                        );
-                    })}
+                                    <RowActions invoice={inv} documentType={documentType} creating={creating} actions={actions} />
+                                </li>
+                            );
+                        })}
+                    </ul>
                 </div>
             )}
 
             <PaymentDialog invoice={paying} open={paying !== null} onClose={() => setPaying(null)} onUpdated={onChanged} />
 
+            {/* Preview */}
             <Dialog open={preview !== null} onOpenChange={(next) => !next && setPreview(null)}>
-                <DialogContent dir="rtl" className="max-w-3xl max-h-[92vh] overflow-y-auto">
-                    <DialogHeader className="text-right sm:text-right pr-8">
+                <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+                    <DialogHeader>
                         <DialogTitle>
-                            معاينة {label} {preview ? <span dir="ltr">#{preview.docNumber}</span> : null}
+                            Preview — {label}
+                            {preview ? ` #${preview.docNumber}` : ""}
                         </DialogTitle>
+                        {preview && (
+                            <DialogDescription>
+                                <bdi>{preview.clientName || "—"}</bdi> · {formatDateEn(preview.issueDate)}
+                            </DialogDescription>
+                        )}
                     </DialogHeader>
                     {preview ? (
                         <>
                             <ScaledPreview>
                                 <InvoiceDocument data={preview} settings={settings} paymentStatus={preview.paymentStatus} />
                             </ScaledPreview>
-                            <div className="flex justify-start gap-2 mt-4">
-                                <Button onClick={() => openPrint(preview)} className="gap-2 bg-[#021526] hover:bg-[#0c3047] text-white dark:bg-[#78B7D0] dark:hover:bg-[#9ccbe0] dark:text-[#021526]">
-                                    <Printer className="h-4 w-4" /> طباعة / تحميل PDF
-                                </Button>
+                            <DialogFooter className="gap-2 sm:justify-end">
                                 <Button variant="outline" onClick={() => setPreview(null)}>
-                                    إغلاق
+                                    Close
                                 </Button>
-                            </div>
+                                <Button onClick={() => openPrint(preview)}>
+                                    <Printer className="h-4 w-4" /> Print / download PDF
+                                </Button>
+                            </DialogFooter>
                         </>
                     ) : null}
                 </DialogContent>
             </Dialog>
-        </div>
-    );
-}
 
-function Field({ label, value, strong, ltr }: { label: string; value: string; strong?: boolean; ltr?: boolean }) {
-    return (
-        <div className="min-w-0">
-            <p className="text-xs text-muted-foreground mb-1">{label}</p>
-            <p className={`truncate ${strong ? "font-bold text-[#021526] dark:text-[#78B7D0]" : "font-medium"}`} dir={ltr ? "ltr" : undefined} style={ltr ? { textAlign: "right" } : undefined}>
-                {ltr ? value : <bdi>{value}</bdi>}
-            </p>
+            {/* Delete confirmation */}
+            <Dialog open={deleting !== null} onOpenChange={(next) => !next && !removing && setDeleting(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>
+                            Delete {label}
+                            {deleting ? ` #${deleting.docNumber}` : ""}?
+                        </DialogTitle>
+                        <DialogDescription>This permanently removes the document. This cannot be undone.</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:justify-end">
+                        <Button variant="outline" onClick={() => setDeleting(null)} disabled={removing}>
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={() => deleting && remove(deleting)} disabled={removing}>
+                            {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
-    );
-}
-
-function IconButton({ title, onClick, danger, children }: { title: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
-    return (
-        <Button size="sm" variant="outline" onClick={onClick} title={title} aria-label={title} className={danger ? "text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" : undefined}>
-            {children}
-        </Button>
     );
 }

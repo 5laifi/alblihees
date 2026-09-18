@@ -97,6 +97,7 @@ export function StatTile({
     iconClassName,
     warn,
     className,
+    valueClassName,
 }: {
     label: ReactNode;
     value: ReactNode;
@@ -107,6 +108,8 @@ export function StatTile({
     /** Highlights the value in amber, for things that need attention */
     warn?: boolean;
     className?: string;
+    /** Overrides the value size, e.g. "text-lg" for long multi-currency amounts */
+    valueClassName?: string;
 }) {
     return (
         <div className={cn("flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm", className)}>
@@ -117,7 +120,13 @@ export function StatTile({
             )}
             <div className="min-w-0">
                 <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                <p className={cn("mt-0.5 truncate text-xl font-semibold tabular-nums tracking-tight", warn && "text-amber-600 dark:text-amber-400")}>
+                <p
+                    className={cn(
+                        "mt-0.5 break-words text-xl font-semibold leading-tight tabular-nums tracking-tight",
+                        warn && "text-amber-600 dark:text-amber-400",
+                        valueClassName
+                    )}
+                >
                     {value}
                 </p>
                 {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}

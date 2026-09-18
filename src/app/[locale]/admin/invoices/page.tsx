@@ -1,16 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Database, FilePlus2, FileText, HardDrive, Loader2, ReceiptText, Settings2, UploadCloud } from "lucide-react";
+import {
+    AlertCircle,
+    Banknote,
+    Clock,
+    Database,
+    FilePlus2,
+    FileText,
+    HardDrive,
+    Loader2,
+    ReceiptText,
+    Settings2,
+    UploadCloud,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { InlineNotice, PageHeader, SegmentedTabs, StatTile, StatusPill } from "@/components/admin/ui";
 import { InvoiceList } from "@/components/invoice/invoice-list";
 import { InvoiceSettingsForm } from "@/components/invoice/invoice-settings-form";
 import { InvoiceWizard } from "@/components/invoice/invoice-wizard";
-import { cn } from "@/lib/utils";
-import { DEFAULT_INVOICE_SETTINGS, type InvoiceSettings, type SavedInvoice } from "@/lib/invoice-types";
+import {
+    DEFAULT_INVOICE_SETTINGS,
+    formatAmountMap,
+    summarizeDocuments,
+    type InvoiceSettings,
+    type SavedInvoice,
+} from "@/lib/invoice-types";
 
 type TabKey = "create" | "invoices" | "quotations" | "settings";
+
+const CODE_CLASS = "rounded bg-muted px-1 py-0.5 text-xs";
+
+function plural(count: number, noun: string) {
+    return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
 
 export default function AdminInvoicesPage() {
     const [tab, setTab] = useState<TabKey>("create");
@@ -53,7 +78,7 @@ export default function AdminInvoicesPage() {
                 setLocalPreview(null);
             }
         } catch {
-            toast.error("تعذر تحميل البيانات");
+            toast.error("Could not load invoices.");
         } finally {
             setLoading(false);
         }
@@ -73,145 +98,194 @@ export default function AdminInvoicesPage() {
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.result) {
-                toast.error("تعذر نقل بيانات المعاينة");
+                toast.error("Could not move the preview data.");
                 return;
             }
             const { settings: movedSettings, imported, skipped } = body.result;
-            toast.success(
-                `تم النقل: ${movedSettings ? "الإعدادات" : "الإعدادات موجودة مسبقاً"}${documents ? `، ${imported} مستند${skipped ? `، وتخطي ${skipped} مكرر` : ""}` : ""}`
-            );
+            const parts = [movedSettings ? "Settings moved" : "Settings were already in the database"];
+            if (documents) {
+                parts.push(`${plural(imported, "document")} moved`);
+                if (skipped) parts.push(`${plural(skipped, "duplicate")} skipped`);
+            }
+            toast.success(parts.join(" · "));
             await load();
         } catch {
-            toast.error("تعذر الاتصال بالخادم");
+            toast.error("Could not reach the server.");
         } finally {
             setImporting(false);
         }
     }
 
-    const count = (type: SavedInvoice["documentType"]) => invoices.filter((inv) => inv.documentType === type).length;
+    function startNew() {
+        setEditing(null);
+        setTab("create");
+    }
 
-    const tabs: { key: TabKey; label: string; icon: typeof FileText; badge?: number }[] = [
-        { key: "create", label: editing ? "تعديل المستند" : "إنشاء جديد", icon: FilePlus2 },
-        { key: "quotations", label: "عروض الأسعار", icon: FileText, badge: count("quotation") },
-        { key: "invoices", label: "الفواتير", icon: ReceiptText, badge: count("invoice") },
-        { key: "settings", label: "الإعدادات", icon: Settings2 },
-    ];
+    const count = (type: SavedInvoice["documentType"]) => invoices.filter((inv) => inv.documentType === type).length;
+    const summary = summarizeDocuments(invoices);
+    const awaiting = summary.unpaid + summary.partial;
+    const hasOutstanding = Object.values(summary.outstanding).some((amount) => amount > 0);
+
+    const previewParts: string[] = [];
+    if (localPreview?.hasSettings) previewParts.push("Settings");
+    if (localPreview && localPreview.documents > 0) previewParts.push(plural(localPreview.documents, "document"));
 
     return (
-        // font-sans = Tajawal first: the admin shell prefers Inter, whose fallback would render Arabic in Arial
-        <div dir="rtl" lang="ar" className="text-right font-sans">
-            <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-primary mb-2">الفواتير وعروض الأسعار</h1>
-                    <p className="text-muted-foreground">أنشئ مستنداتك بهوية ضاري البليهيس واحفظها وتابع حالة الدفع.</p>
-                </div>
-                {storage ? (
-                    <span
-                        className={cn(
-                            "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-                            storage === "local" ? "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-200" : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200"
+        <div className="space-y-6">
+            <PageHeader
+                title="Invoices & Quotations"
+                description="Create branded quotations and invoices, track payments and export PDFs."
+                actions={
+                    <>
+                        {storage === "supabase" && (
+                            <StatusPill tone="green">
+                                <Database className="h-3 w-3" /> Connected to database
+                            </StatusPill>
                         )}
-                    >
-                        {storage === "local" ? <HardDrive className="h-3.5 w-3.5" /> : <Database className="h-3.5 w-3.5" />}
-                        {storage === "local" ? "وضع المعاينة: الحفظ على هذا الجهاز فقط" : "متصل بقاعدة البيانات"}
-                    </span>
-                ) : null}
-            </div>
-
-            {storage === "local" ? (
-                <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:bg-amber-900/20 dark:text-amber-100">
-                    <b>لماذا وضع المعاينة؟</b> لم يتم ضبط المفتاح <code dir="ltr">SUPABASE_SERVICE_ROLE_KEY</code> بعد، فيتم الحفظ في ملف على هذا الجهاز.
-                    أضف المفتاح إلى ملف <code dir="ltr">.env.local</code> وإلى متغيرات Vercel ثم أعد تشغيل الخادم، وسيتحول الحفظ تلقائياً إلى قاعدة البيانات.
-                </div>
-            ) : null}
-
-            {localPreview ? (
-                <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#78B7D0]/50 bg-[#78B7D0]/10 p-4 text-sm">
-                    <div className="leading-7">
-                        <b>بيانات من وضع المعاينة جاهزة للنقل إلى قاعدة البيانات:</b>{" "}
-                        {localPreview.hasSettings ? "الإعدادات" : ""}
-                        {localPreview.hasSettings && localPreview.documents > 0 ? " و" : ""}
-                        {localPreview.documents > 0 ? `${localPreview.documents} مستند` : ""}.
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Button size="sm" onClick={() => importPreview(false)} disabled={importing} className="gap-2 bg-[#021526] hover:bg-[#0c3047] text-white dark:bg-[#78B7D0] dark:hover:bg-[#9ccbe0] dark:text-[#021526]">
-                            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                            نقل الإعدادات فقط
+                        {storage === "local" && (
+                            <StatusPill tone="amber">
+                                <HardDrive className="h-3 w-3" /> Preview mode · saved on this device
+                            </StatusPill>
+                        )}
+                        <Button onClick={startNew} className="gap-2">
+                            <FilePlus2 className="h-4 w-4" /> New document
                         </Button>
-                        {localPreview.documents > 0 ? (
-                            <Button size="sm" variant="outline" onClick={() => importPreview(true)} disabled={importing}>
-                                نقل الإعدادات والمستندات
-                            </Button>
-                        ) : null}
-                    </div>
-                </div>
-            ) : null}
+                    </>
+                }
+            />
 
-            {setupRequired ? (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-amber-900 dark:bg-amber-900/20 dark:text-amber-100">
-                    <h2 className="font-bold text-lg mb-2">قاعدة البيانات غير مهيأة بعد</h2>
-                    <p className="text-sm leading-7">
-                        شغّل ملف <code dir="ltr">supabase-invoices.sql</code> في محرر SQL داخل Supabase، ثم أضف المفتاح
-                        <code dir="ltr"> SUPABASE_SERVICE_ROLE_KEY </code> إلى متغيرات البيئة وأعد النشر.
-                    </p>
-                </div>
-            ) : loading ? (
-                <div className="flex items-center justify-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-            ) : (
-                <>
-                    <div className="flex flex-wrap gap-2 mb-6">
-                        {tabs.map((t) => (
-                            <button
-                                key={t.key}
-                                type="button"
-                                onClick={() => {
-                                    setTab(t.key);
-                                    if (t.key !== "create") setEditing(null);
-                                }}
-                                className={cn(
-                                    "inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all",
-                                    tab === t.key ? "bg-[#021526] text-white shadow-lg dark:bg-[#78B7D0] dark:text-[#021526]" : "bg-card border hover:bg-muted"
-                                )}
-                            >
-                                <t.icon className="h-4 w-4" />
-                                {t.label}
-                                {t.badge ? (
-                                    <span className={cn("rounded-full px-2 text-xs", tab === t.key ? "bg-white/20" : "bg-muted-foreground/15")}>{t.badge}</span>
-                                ) : null}
-                            </button>
-                        ))}
-                    </div>
-
-                    {tab === "create" ? (
-                        <InvoiceWizard
-                            editing={editing}
-                            settings={settings}
-                            nextNumber={nextNumber}
-                            onCancelEdit={() => setEditing(null)}
-                            onSaved={(saved) => {
-                                setEditing(null);
-                                setTab(saved.documentType === "invoice" ? "invoices" : "quotations");
-                                load();
-                            }}
-                        />
-                    ) : tab === "settings" ? (
-                        <InvoiceSettingsForm settings={settings} onSaved={setSettings} />
-                    ) : (
-                        <InvoiceList
-                            documentType={tab === "invoices" ? "invoice" : "quotation"}
-                            invoices={invoices}
-                            settings={settings}
-                            onChanged={load}
-                            onEdit={(inv) => {
-                                setEditing(inv);
-                                setTab("create");
-                            }}
-                        />
-                    )}
-                </>
+            {setupRequired && (
+                <InlineNotice tone="red" icon={AlertCircle} title="Database not set up yet">
+                    Run <code className={CODE_CLASS}>supabase-invoices.sql</code> in the Supabase SQL editor, then add{" "}
+                    <code className={CODE_CLASS}>SUPABASE_SERVICE_ROLE_KEY</code> to the environment variables and redeploy.
+                </InlineNotice>
             )}
+
+            {storage === "local" && (
+                <InlineNotice tone="amber" icon={HardDrive} title="Preview mode">
+                    <code className={CODE_CLASS}>SUPABASE_SERVICE_ROLE_KEY</code> is not set, so documents are saved to a file on this machine. Add the
+                    key to <code className={CODE_CLASS}>.env.local</code> and to the Vercel environment variables, restart the server, and saving
+                    switches to the database automatically.
+                </InlineNotice>
+            )}
+
+            {localPreview && (
+                <InlineNotice
+                    tone="sky"
+                    icon={UploadCloud}
+                    title="Preview data ready to move to the database"
+                    action={
+                        <>
+                            <Button size="sm" onClick={() => importPreview(false)} disabled={importing} className="gap-2">
+                                {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                                Move settings
+                            </Button>
+                            {localPreview.documents > 0 && (
+                                <Button size="sm" variant="outline" onClick={() => importPreview(true)} disabled={importing}>
+                                    Move settings and documents
+                                </Button>
+                            )}
+                        </>
+                    }
+                >
+                    {previewParts.length > 0 ? `${previewParts.join(" and ")} from the local preview file can be moved to the database.` : "The local preview file can be moved to the database."}
+                </InlineNotice>
+            )}
+
+            {!setupRequired &&
+                (loading ? (
+                    <div className="space-y-6">
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            {Array.from({ length: 4 }).map((_, i) => (
+                                <Skeleton key={i} className="h-24 rounded-xl" />
+                            ))}
+                        </div>
+                        <Skeleton className="h-9 w-full max-w-md rounded-lg" />
+                        <Skeleton className="h-64 rounded-xl" />
+                    </div>
+                ) : (
+                    <>
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <StatTile
+                                label="Quotations"
+                                value={summary.quotations}
+                                icon={FileText}
+                                iconClassName="bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                            />
+                            <StatTile
+                                label="Invoices"
+                                value={summary.invoices}
+                                icon={ReceiptText}
+                                iconClassName="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                            />
+                            <StatTile
+                                label="Awaiting payment"
+                                value={awaiting}
+                                icon={Clock}
+                                iconClassName="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                warn={awaiting > 0}
+                                hint={
+                                    summary.partial > 0
+                                        ? `${summary.partial} partially paid`
+                                        : summary.invoices > 0
+                                          ? "All invoices settled"
+                                          : undefined
+                                }
+                            />
+                            <StatTile
+                                label="Outstanding"
+                                value={formatAmountMap(summary.outstanding)}
+                                valueClassName={Object.keys(summary.outstanding).length > 1 ? "text-base" : undefined}
+                                icon={Banknote}
+                                iconClassName="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                warn={hasOutstanding}
+                                hint="Still owed on invoices"
+                            />
+                        </div>
+
+                        <SegmentedTabs<TabKey>
+                            aria-label="Invoice sections"
+                            value={tab}
+                            onChange={(key) => {
+                                setTab(key);
+                                if (key !== "create") setEditing(null);
+                            }}
+                            options={[
+                                { value: "create", label: editing ? "Edit document" : "New document", icon: FilePlus2 },
+                                { value: "quotations", label: "Quotations", icon: FileText, count: count("quotation") },
+                                { value: "invoices", label: "Invoices", icon: ReceiptText, count: count("invoice") },
+                                { value: "settings", label: "Settings", icon: Settings2 },
+                            ]}
+                        />
+
+                        {tab === "create" ? (
+                            <InvoiceWizard
+                                editing={editing}
+                                settings={settings}
+                                nextNumber={nextNumber}
+                                onCancelEdit={() => setEditing(null)}
+                                onSaved={(saved) => {
+                                    setEditing(null);
+                                    setTab(saved.documentType === "invoice" ? "invoices" : "quotations");
+                                    load();
+                                }}
+                            />
+                        ) : tab === "settings" ? (
+                            <InvoiceSettingsForm settings={settings} onSaved={setSettings} />
+                        ) : (
+                            <InvoiceList
+                                documentType={tab === "invoices" ? "invoice" : "quotation"}
+                                invoices={invoices}
+                                settings={settings}
+                                onChanged={load}
+                                onEdit={(inv) => {
+                                    setEditing(inv);
+                                    setTab("create");
+                                }}
+                            />
+                        )}
+                    </>
+                ))}
         </div>
     );
 }

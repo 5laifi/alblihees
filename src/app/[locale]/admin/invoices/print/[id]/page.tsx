@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download, Loader2, Printer, X } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "@/i18n/routing";
 import { Button } from "@/components/ui/button";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
 import { ScaledPreview } from "@/components/invoice/scaled-preview";
 import { exportNodeToPdf } from "@/lib/invoice-export";
-import { DEFAULT_INVOICE_SETTINGS, DOC_LABELS, docFileName, type InvoiceSettings, type SavedInvoice } from "@/lib/invoice-types";
+import { DEFAULT_INVOICE_SETTINGS, DOC_LABELS_EN, docFileName, type InvoiceSettings, type SavedInvoice } from "@/lib/invoice-types";
 
 // Print CSS: everything except the document is hidden, the preview scaling is
 // switched off, and the document prints edge to edge with backgrounds kept.
@@ -76,7 +77,7 @@ export default function InvoicePrintPage() {
             await exportNodeToPdf(docRef.current, docFileName(invoice));
         } catch (error) {
             console.error("PDF export failed:", error);
-            toast.error("تعذر إنشاء ملف PDF، جرّب زر الطباعة");
+            toast.error("Could not create the PDF. Try the Print button instead.");
         } finally {
             setExporting(false);
         }
@@ -84,7 +85,7 @@ export default function InvoicePrintPage() {
 
     if (state === "loading") {
         return (
-            <div className="min-h-screen flex items-center justify-center">
+            <div className="flex min-h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         );
@@ -92,40 +93,49 @@ export default function InvoicePrintPage() {
 
     if (state === "error") {
         return (
-            <div dir="rtl" className="min-h-screen flex items-center justify-center text-muted-foreground">
-                تعذر تحميل المستند. حدّث الصفحة أو سجّل الدخول من جديد.
+            <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                The document could not be loaded. Refresh the page or sign in again.
             </div>
         );
     }
 
     if (state === "missing" || !invoice) {
         return (
-            <div dir="rtl" className="min-h-screen flex items-center justify-center text-muted-foreground">
-                لم يتم العثور على المستند.
+            <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+                <p className="text-sm text-muted-foreground">Document not found.</p>
+                <Button asChild variant="outline">
+                    <Link href="/admin/invoices">Back to invoices</Link>
+                </Button>
             </div>
         );
     }
 
     return (
-        <div className="invoice-print-area min-h-screen bg-slate-200 dark:bg-[#010d18]">
+        <div dir="ltr" className="invoice-print-area min-h-screen bg-slate-200 dark:bg-[#010d18]">
             <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
 
-            <div dir="rtl" className="invoice-no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-[#021526] px-4 py-3 text-white shadow-lg">
-                <div className="font-bold">
-                    {DOC_LABELS[invoice.documentType]} <span dir="ltr">#{invoice.docNumber}</span>
-                    <span className="mx-2 text-white/40">|</span>
-                    <span className="font-normal text-white/80">{invoice.clientName}</span>
+            <div className="invoice-no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-[#021526] px-4 py-3 text-white shadow-lg">
+                <div className="flex min-w-0 items-center gap-2 text-sm">
+                    <span className="font-semibold">
+                        {DOC_LABELS_EN[invoice.documentType]} #{invoice.docNumber}
+                    </span>
+                    {invoice.clientName && (
+                        <>
+                            <span className="text-white/40">·</span>
+                            <bdi className="truncate text-white/80">{invoice.clientName}</bdi>
+                        </>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button onClick={download} disabled={exporting} className="gap-2 bg-[#78B7D0] text-[#021526] hover:bg-[#9ccbe0]">
                         {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        تحميل PDF
+                        Download PDF
                     </Button>
                     <Button onClick={() => window.print()} variant="outline" className="gap-2 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
-                        <Printer className="h-4 w-4" /> طباعة
+                        <Printer className="h-4 w-4" /> Print
                     </Button>
                     <Button onClick={() => window.close()} variant="ghost" className="gap-2 text-white hover:bg-white/10 hover:text-white">
-                        <X className="h-4 w-4" /> إغلاق
+                        <X className="h-4 w-4" /> Close
                     </Button>
                 </div>
             </div>

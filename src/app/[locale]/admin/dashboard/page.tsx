@@ -5,6 +5,7 @@ import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SectionCard, StatusPill } from "@/components/admin/ui";
 import { DashboardInvoicesCard } from "@/components/invoice/dashboard-invoices-card";
 import {
     Briefcase,
@@ -30,6 +31,7 @@ import {
     AlertCircle,
     Loader2,
     Circle,
+    ReceiptText,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -144,51 +146,6 @@ async function fetchDashboard(): Promise<{ data: DashboardData; state: LoadState
 }
 
 /* ------------------------------------------------------------------ */
-/* Small presentational pieces                                         */
-/* ------------------------------------------------------------------ */
-
-function SectionCard({
-    title,
-    description,
-    action,
-    children,
-    className,
-}: {
-    title: string;
-    description?: string;
-    action?: React.ReactNode;
-    children: React.ReactNode;
-    className?: string;
-}) {
-    return (
-        <section className={cn("flex flex-col rounded-xl border bg-card text-card-foreground shadow-sm", className)}>
-            <header className="flex items-start justify-between gap-4 border-b px-5 py-4">
-                <div>
-                    <h2 className="text-sm font-semibold">{title}</h2>
-                    {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-                </div>
-                {action}
-            </header>
-            <div className="flex-1">{children}</div>
-        </section>
-    );
-}
-
-function StatusPill({ tone, children }: { tone: "green" | "amber" | "red" | "muted"; children: React.ReactNode }) {
-    const styles = {
-        green: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-        amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-        red: "bg-red-500/10 text-red-600 dark:text-red-400",
-        muted: "bg-muted text-muted-foreground",
-    };
-    return (
-        <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium", styles[tone])}>
-            {children}
-        </span>
-    );
-}
-
-/* ------------------------------------------------------------------ */
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -283,9 +240,11 @@ export default function AdminDashboardPage() {
         { label: "Edit profile & bio", description: "Name, titles, contact and socials", href: "/admin/content", icon: FileText },
         { label: "Upload media", description: "Add a video, audio clip or photo", href: "/admin/media", icon: Upload },
         { label: "Add a service", description: "Create a new public offering", href: "/admin/services", icon: Plus },
+        { label: "New document", description: "Create a quotation or invoice", href: "/admin/invoices", icon: ReceiptText },
         { label: "Add a partner", description: "Channels and organizations", href: "/admin/partners", icon: Users },
         { label: "Update experience", description: "Stats and career timeline", href: "/admin/experience", icon: Award },
         { label: "Site settings", description: "Maintenance, hero video, password", href: "/admin/settings", icon: Settings },
+        { label: "Read messages", description: "Reply to contact form submissions", href: "/admin/contacts", icon: Mail },
     ];
 
     /* ---------------- Site status ---------------- */
@@ -368,9 +327,6 @@ export default function AdminDashboardPage() {
                     );
                 })}
             </div>
-
-            {/* Invoices & quotations */}
-            <DashboardInvoicesCard refreshKey={invoicesRefreshKey} />
 
             {/* Main grid */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -540,29 +496,8 @@ export default function AdminDashboardPage() {
                     </div>
                 </SectionCard>
 
-                {/* Quick actions */}
-                <SectionCard title="Quick actions" description="Jump straight to common tasks" className="lg:col-span-2">
-                    <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
-                        {quickActions.map((action) => {
-                            const Icon = action.icon;
-                            return (
-                                <Link
-                                    key={action.href + action.label}
-                                    href={action.href}
-                                    className="group flex items-start gap-3 rounded-lg border bg-background p-3.5 transition-colors hover:border-[#78B7D0] hover:bg-[#78B7D0]/5"
-                                >
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-[#78B7D0]/15 group-hover:text-[#021526] dark:group-hover:text-[#78B7D0]">
-                                        <Icon className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium leading-tight">{action.label}</p>
-                                        <p className="mt-0.5 text-xs text-muted-foreground">{action.description}</p>
-                                    </div>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </SectionCard>
+                {/* Invoices & quotations */}
+                <DashboardInvoicesCard refreshKey={invoicesRefreshKey} className="lg:col-span-2" />
 
                 {/* Media breakdown */}
                 <SectionCard
@@ -600,6 +535,30 @@ export default function AdminDashboardPage() {
                                         />
                                     </div>
                                 </div>
+                            );
+                        })}
+                    </div>
+                </SectionCard>
+
+                {/* Quick actions */}
+                <SectionCard title="Quick actions" description="Jump straight to common tasks" className="lg:col-span-3">
+                    <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+                        {quickActions.map((action) => {
+                            const Icon = action.icon;
+                            return (
+                                <Link
+                                    key={action.href + action.label}
+                                    href={action.href}
+                                    className="group flex items-start gap-3 rounded-lg border bg-background p-3.5 transition-colors hover:border-[#78B7D0] hover:bg-[#78B7D0]/5"
+                                >
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-[#78B7D0]/15 group-hover:text-[#021526] dark:group-hover:text-[#78B7D0]">
+                                        <Icon className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium leading-tight">{action.label}</p>
+                                        <p className="mt-0.5 text-xs text-muted-foreground">{action.description}</p>
+                                    </div>
+                                </Link>
                             );
                         })}
                     </div>

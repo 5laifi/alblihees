@@ -3,13 +3,22 @@
 import { useEffect, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
+import { SectionCard } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { TEMPLATES, emptyInvoice, type InvoiceSettings } from "@/lib/invoice-types";
+import { cn } from "@/lib/utils";
+import {
+    TEMPLATES,
+    TEMPLATE_LABELS_EN,
+    emptyInvoice,
+    type InvoiceSettings,
+    type InvoiceTemplate,
+    type Numerals,
+} from "@/lib/invoice-types";
 import { InvoiceDocument } from "./invoice-document";
 import { ScaledPreview } from "./scaled-preview";
 
@@ -18,6 +27,8 @@ interface Props {
     onSaved: (settings: InvoiceSettings) => void;
 }
 
+// The sample stays Arabic on purpose: the printed document is always Arabic,
+// only the admin chrome around it is English.
 const SAMPLE = emptyInvoice({
     docNumber: 100,
     clientName: "اسم العميل",
@@ -25,10 +36,13 @@ const SAMPLE = emptyInvoice({
     items: [{ id: "sample", description: "وصف الخدمة يظهر هنا\nمع تفاصيل الموعد والمكان", price: 500, quantity: 1 }],
 });
 
+const FIELD_GRID = "grid gap-4 p-5 sm:grid-cols-2";
+
 export function InvoiceSettingsForm({ settings, onSaved }: Props) {
     const [form, setForm] = useState<InvoiceSettings>(settings);
     const [saving, setSaving] = useState(false);
 
+    // Keep the form in step with the settings the parent reloads after a save
     useEffect(() => setForm(settings), [settings]);
 
     function set<K extends keyof InvoiceSettings>(key: K, value: InvoiceSettings[K]) {
@@ -45,25 +59,30 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.settings) {
-                toast.error("تعذر حفظ الإعدادات، تحقق من الحقول");
+                toast.error("Could not save the settings, check the fields.");
                 return;
             }
-            toast.success("تم حفظ الإعدادات");
+            toast.success("Settings saved");
             onSaved(body.settings as InvoiceSettings);
         } catch {
-            toast.error("تعذر الاتصال بالخادم");
+            toast.error("Could not reach the server.");
         } finally {
             setSaving(false);
         }
     }
 
-    const text = (key: keyof InvoiceSettings, label: string, options: { ltr?: boolean; placeholder?: string } = {}) => (
-        <div className="space-y-2">
+    // Free-text fields may hold Arabic, so they get dir="auto"; codes, URLs
+    // and numbers stay in the console's own direction.
+    const text = (
+        key: keyof InvoiceSettings,
+        label: string,
+        options: { auto?: boolean; placeholder?: string; className?: string } = {}
+    ) => (
+        <div className={cn("space-y-2", options.className)}>
             <Label htmlFor={`set-${key}`}>{label}</Label>
             <Input
                 id={`set-${key}`}
-                dir={options.ltr ? "ltr" : undefined}
-                className={options.ltr ? "text-right" : undefined}
+                dir={options.auto ? "auto" : undefined}
                 placeholder={options.placeholder}
                 value={String(form[key] ?? "")}
                 onChange={(e) => set(key, e.target.value as never)}
@@ -72,125 +91,118 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
     );
 
     return (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)] items-start">
-            <div className="space-y-6 min-w-0">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>بيانات التواصل</CardTitle>
-                        <CardDescription>تظهر أسفل كل فاتورة وعرض سعر.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 sm:grid-cols-2">
-                        {text("phone", "رقم الهاتف", { ltr: true, placeholder: "+965..." })}
-                        {text("email", "البريد الإلكتروني", { ltr: true })}
-                        {text("website", "الموقع الإلكتروني", { ltr: true })}
-                        {text("businessNameEn", "الاسم بالإنجليزية (العلامة المائية)", { ltr: true })}
-                        <div className="sm:col-span-2">{text("tagline", "الشعار النصي")}</div>
-                    </CardContent>
-                </Card>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+            <div className="min-w-0 space-y-6">
+                <SectionCard title="Contact details" description="Shown at the bottom of every document." contentClassName={FIELD_GRID}>
+                    {text("phone", "Phone", { placeholder: "+965…" })}
+                    {text("email", "Email")}
+                    {text("website", "Website")}
+                    {text("businessNameEn", "English name (watermark)")}
+                    {text("tagline", "Tagline", { auto: true, className: "sm:col-span-2" })}
+                </SectionCard>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>بيانات الدفع</CardTitle>
-                        <CardDescription>تُحفظ في قاعدة البيانات فقط ولا تُكتب داخل الكود. اترك الحقل فارغاً لإخفائه من المستند.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 sm:grid-cols-2">
-                        <div className="sm:col-span-2">{text("payeeName", "اسم المستفيد في الشيك")}</div>
-                        <div className="sm:col-span-2">{text("iban", "IBAN", { ltr: true })}</div>
-                        {text("accountNumber", "رقم الحساب", { ltr: true })}
-                        {text("accountName", "اسم الحساب (بالإنجليزية)", { ltr: true })}
-                        <div className="space-y-2 sm:col-span-2">
-                            <Label htmlFor="set-quotationTerms">نص الدفع في عروض الأسعار</Label>
-                            <Textarea id="set-quotationTerms" rows={2} value={form.quotationTerms} onChange={(e) => set("quotationTerms", e.target.value)} />
-                        </div>
-                        <div className="space-y-2 sm:col-span-2">
-                            <Label htmlFor="set-invoiceTerms">نص الدفع في الفواتير</Label>
-                            <Textarea id="set-invoiceTerms" rows={2} value={form.invoiceTerms} onChange={(e) => set("invoiceTerms", e.target.value)} />
-                        </div>
-                    </CardContent>
-                </Card>
+                <SectionCard
+                    title="Payment details"
+                    description="Stored in the database only, never in the code. Leave a field empty to hide it from the document."
+                    contentClassName={FIELD_GRID}
+                >
+                    {text("payeeName", "Cheque payee name", { auto: true, className: "sm:col-span-2" })}
+                    {text("iban", "IBAN", { className: "sm:col-span-2" })}
+                    {text("accountNumber", "Account number")}
+                    {text("accountName", "Account name (English)")}
+                    <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="set-quotationTerms">Payment text on quotations</Label>
+                        <Textarea
+                            id="set-quotationTerms"
+                            rows={2}
+                            dir="auto"
+                            value={form.quotationTerms}
+                            onChange={(e) => set("quotationTerms", e.target.value)}
+                        />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="set-invoiceTerms">Payment text on invoices</Label>
+                        <Textarea
+                            id="set-invoiceTerms"
+                            rows={2}
+                            dir="auto"
+                            value={form.invoiceTerms}
+                            onChange={(e) => set("invoiceTerms", e.target.value)}
+                        />
+                    </div>
+                </SectionCard>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>ضابط الاتصال والتوقيع</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 sm:grid-cols-2">
-                        {text("liaisonTitle", "المسمى")}
-                        {text("liaisonName", "الاسم")}
-                        {text("liaisonPhone", "الهاتف", { ltr: true })}
-                        {text("signatureUrl", "رابط صورة التوقيع", { ltr: true })}
-                        <div className="flex items-center gap-3 sm:col-span-2">
-                            <Switch id="set-showSignature" dir="ltr" checked={form.showSignature} onCheckedChange={(v) => set("showSignature", v)} />
-                            <Label htmlFor="set-showSignature">إظهار التوقيع</Label>
-                        </div>
-                    </CardContent>
-                </Card>
+                <SectionCard title="Liaison officer & signature" contentClassName={FIELD_GRID}>
+                    {text("liaisonTitle", "Title", { auto: true })}
+                    {text("liaisonName", "Name", { auto: true })}
+                    {text("liaisonPhone", "Phone")}
+                    {text("signatureUrl", "Signature image URL")}
+                    <div className="flex items-center gap-3 sm:col-span-2">
+                        <Switch id="set-showSignature" checked={form.showSignature} onCheckedChange={(v) => set("showSignature", v)} />
+                        <Label htmlFor="set-showSignature">Show signature on documents</Label>
+                    </div>
+                </SectionCard>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>خيارات المستند</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 sm:grid-cols-2">
-                        <div className="sm:col-span-2">{text("qrUrl", "رابط رمز QR (اتركه فارغاً لإخفائه)", { ltr: true })}</div>
-                        <div className="space-y-2">
-                            <Label htmlFor="set-defaultTemplate">القالب الافتراضي</Label>
-                            <NativeSelect id="set-defaultTemplate" value={form.defaultTemplate} onChange={(v) => set("defaultTemplate", v as InvoiceSettings["defaultTemplate"])}>
+                <SectionCard title="Document options" contentClassName={FIELD_GRID}>
+                    {text("qrUrl", "QR code link (leave empty to hide)", { className: "sm:col-span-2" })}
+                    <div className="space-y-2">
+                        <Label htmlFor="set-defaultTemplate">Default template</Label>
+                        <Select value={form.defaultTemplate} onValueChange={(v) => set("defaultTemplate", v as InvoiceTemplate)}>
+                            <SelectTrigger id="set-defaultTemplate">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
                                 {TEMPLATES.map((t) => (
-                                    <option key={t.key} value={t.key}>
-                                        {t.label}
-                                    </option>
+                                    <SelectItem key={t.key} value={t.key}>
+                                        {TEMPLATE_LABELS_EN[t.key].label}
+                                    </SelectItem>
                                 ))}
-                            </NativeSelect>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="set-numerals">شكل الأرقام في المبالغ</Label>
-                            <NativeSelect id="set-numerals" value={form.numerals} onChange={(v) => set("numerals", v as InvoiceSettings["numerals"])}>
-                                <option value="arabic">أرقام عربية (٥٠٠)</option>
-                                <option value="latin">أرقام إنجليزية (500)</option>
-                            </NativeSelect>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="set-startNumber">بداية الترقيم التلقائي</Label>
-                            <Input
-                                id="set-startNumber"
-                                type="number"
-                                min={1}
-                                dir="ltr"
-                                className="text-right"
-                                value={form.startNumber || ""}
-                                onChange={(e) => set("startNumber", Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-                            />
-                            <p className="text-xs text-muted-foreground">الرقم التالي هو الأكبر بين هذا الرقم وآخر رقم محفوظ + ١. لا يمكن كتابة الرقم يدوياً داخل المستند.</p>
-                        </div>
-                    </CardContent>
-                </Card>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="set-numerals">Numerals on amounts</Label>
+                        <Select value={form.numerals} onValueChange={(v) => set("numerals", v as Numerals)}>
+                            <SelectTrigger id="set-numerals">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="arabic">Arabic numerals (٥٠٠)</SelectItem>
+                                <SelectItem value="latin">Latin numerals (500)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="set-startNumber">Numbering starts at</Label>
+                        <Input
+                            id="set-startNumber"
+                            type="number"
+                            min={1}
+                            value={form.startNumber || ""}
+                            onChange={(e) => set("startNumber", Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            The next number is the larger of this value and the last saved number + 1. Numbers cannot be typed on the document.
+                        </p>
+                    </div>
+                </SectionCard>
 
-                <Button onClick={save} disabled={saving} className="gap-2 bg-[#021526] hover:bg-[#0c3047] text-white dark:bg-[#78B7D0] dark:hover:bg-[#9ccbe0] dark:text-[#021526]">
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    حفظ الإعدادات
-                </Button>
+                <div className="flex justify-end">
+                    <Button onClick={save} disabled={saving} className="gap-2">
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save settings
+                    </Button>
+                </div>
             </div>
 
             <div className="min-w-0 lg:sticky lg:top-4">
-                <div className="mb-2 text-sm font-medium text-muted-foreground">معاينة بالبيانات الحالية</div>
-                <div className="rounded-xl bg-muted/40 p-3 sm:p-5">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Preview with current settings</p>
+                <div className="rounded-xl border bg-muted/30 p-3 sm:p-5">
                     <ScaledPreview>
                         <InvoiceDocument data={{ ...SAMPLE, template: form.defaultTemplate }} settings={form} />
                     </ScaledPreview>
                 </div>
             </div>
         </div>
-    );
-}
-
-function NativeSelect({ id, value, onChange, children }: { id: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) {
-    return (
-        <select
-            id={id}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-            {children}
-        </select>
     );
 }

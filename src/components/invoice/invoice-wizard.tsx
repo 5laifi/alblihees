@@ -1,24 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowRight, Check, Download, Loader2, Lock, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { InlineNotice, SectionCard, SegmentedTabs } from "@/components/admin/ui";
 import { cn } from "@/lib/utils";
 import {
     CURRENCIES,
-    DOC_LABELS,
+    DOC_LABELS_EN,
     TEMPLATES,
+    TEMPLATE_LABELS_EN,
     calcTotals,
-    currencySymbol,
+    currencyLabelEn,
     docFileName,
     emptyInvoice,
-    formatMoney,
+    formatAmount,
     newItemId,
     statusForPayment,
     type DocumentType,
@@ -39,7 +40,11 @@ interface InvoiceWizardProps {
     onCancelEdit: () => void;
 }
 
-const STEPS = ["بيانات المستند", "الخدمات", "المراجعة"];
+const STEPS: { title: string; description: string }[] = [
+    { title: "Document details", description: "Start with the basics: type, client and project." },
+    { title: "Services", description: "Add the services with a description and a price." },
+    { title: "Review", description: "Check the details and apply a discount if needed." },
+];
 
 type ItemDraft = { description: string; price: string; quantity: string };
 const EMPTY_DRAFT: ItemDraft = { description: "", price: "", quantity: "1" };
@@ -89,7 +94,6 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
     }, []);
 
     const totals = useMemo(() => calcTotals(data.items, data.discount), [data.items, data.discount]);
-    const symbol = currencySymbol(data.currency);
 
     function update<K extends keyof InvoiceData>(field: K, value: InvoiceData[K]) {
         setData((prev) => ({ ...prev, [field]: value }));
@@ -111,6 +115,13 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
         }));
         setDraft(EMPTY_DRAFT);
         setEditingItemId(null);
+    }
+
+    // Enter in the price or quantity field adds the service, like a form submit.
+    function commitOnEnter(e: KeyboardEvent<HTMLInputElement>) {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        commitItem();
     }
 
     function editItem(item: InvoiceItem) {
@@ -154,12 +165,15 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.invoice) {
-                if (body.code === "SETUP_REQUIRED") toast.error("قاعدة البيانات غير مهيأة بعد");
-                else if (body.code === "DUPLICATE_NUMBER") toast.error(`يوجد ${DOC_LABELS[data.documentType]} آخر بالرقم ${data.docNumber}، لا يمكن تغيير نوع هذا المستند`);
+                if (body.code === "SETUP_REQUIRED") toast.error("The database is not set up yet.");
+                else if (body.code === "DUPLICATE_NUMBER")
+                    toast.error(
+                        `Another ${DOC_LABELS_EN[data.documentType].toLowerCase()} already uses number ${data.docNumber}; the document type cannot be changed.`
+                    );
                 else if (res.status === 400) {
                     const field = Array.isArray(body.issues) ? body.issues[0]?.path?.[0] : undefined;
-                    toast.error(field ? `بيانات غير صالحة في الحقل: ${String(field)}` : "بيانات المستند غير صالحة");
-                } else toast.error("تعذر حفظ المستند");
+                    toast.error(field ? `Invalid value in field: ${String(field)}` : "The document data is invalid.");
+                } else toast.error("Could not save the document.");
                 return;
             }
 
@@ -177,357 +191,427 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                     await exportNodeToPdf(docRef.current, docFileName(saved));
                 } catch (error) {
                     console.error("PDF export failed:", error);
-                    toast.error("تم الحفظ، لكن تعذر إنشاء ملف PDF");
+                    toast.error("Saved, but the PDF could not be generated.");
                 }
             }
 
-            toast.success(`تم حفظ ${DOC_LABELS[saved.documentType]} رقم ${saved.docNumber}`);
+            toast.success(`${DOC_LABELS_EN[saved.documentType]} #${saved.docNumber} saved`);
             onSaved(saved);
         } catch {
-            toast.error("تعذر الاتصال بالخادم");
+            toast.error("Could not reach the server.");
         } finally {
             setBusy(null);
         }
     }
 
+    const current = STEPS[step - 1];
+
     return (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             {/* ---------- Wizard ---------- */}
-            <div className="flex flex-col min-w-0">
+            <div className="flex min-w-0 flex-col gap-6">
                 {editing ? (
-                    <div className="mb-4 flex items-center justify-between rounded-lg border border-[#78B7D0]/40 bg-[#78B7D0]/10 px-4 py-2.5 text-sm">
-                        <span>
-                            تعديل {DOC_LABELS[editing.documentType]} رقم <b dir="ltr">{editing.docNumber}</b>
-                        </span>
-                        <Button variant="ghost" size="sm" onClick={onCancelEdit} className="gap-1">
-                            <X className="h-4 w-4" /> إلغاء التعديل
-                        </Button>
-                    </div>
+                    <InlineNotice
+                        tone="sky"
+                        icon={Pencil}
+                        title={
+                            <>
+                                Editing {DOC_LABELS_EN[editing.documentType]} #{editing.docNumber}
+                            </>
+                        }
+                        action={
+                            <Button variant="ghost" size="sm" onClick={onCancelEdit} className="gap-1.5">
+                                <X className="h-4 w-4" /> Cancel editing
+                            </Button>
+                        }
+                    />
                 ) : null}
 
-                <div className="mb-6">
-                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
-                        {STEPS.map((label, index) => (
-                            <span key={label} className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => (index + 1 < step || stepOneValid) && setStep(index + 1)}
-                                    className={cn("transition-colors", step >= index + 1 && "text-primary font-bold")}
-                                >
-                                    {label}
-                                </button>
-                                {index < STEPS.length - 1 ? <ArrowLeft className="h-4 w-4" /> : null}
-                            </span>
-                        ))}
-                    </div>
-                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                        <motion.div
-                            className="h-full bg-[#78B7D0]"
-                            initial={false}
-                            animate={{ width: `${(step / STEPS.length) * 100}%` }}
-                            transition={{ duration: 0.3 }}
+                {/* Stepper */}
+                <nav aria-label="Progress">
+                    <ol className="flex items-center gap-2 sm:gap-3">
+                        {STEPS.map((s, index) => {
+                            const number = index + 1;
+                            const isCurrent = step === number;
+                            const isDone = step > number;
+                            return (
+                                <li key={s.title} className={cn("flex items-center gap-2 sm:gap-3", index < STEPS.length - 1 && "flex-1")}>
+                                    <button
+                                        type="button"
+                                        aria-current={isCurrent ? "step" : undefined}
+                                        onClick={() => (number < step || stepOneValid) && setStep(number)}
+                                        className="flex items-center gap-2 rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        <span
+                                            className={cn(
+                                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
+                                                isDone && "border-transparent bg-[#78B7D0] text-[#021526]",
+                                                isCurrent && "border-[#021526] text-[#021526] dark:border-[#78B7D0] dark:text-[#78B7D0]",
+                                                !isDone && !isCurrent && "text-muted-foreground"
+                                            )}
+                                        >
+                                            {isDone ? <Check className="h-3.5 w-3.5" /> : number}
+                                        </span>
+                                        {/* On phones only the current step's label fits; the others show as numbered circles. */}
+                                        <span className={cn("whitespace-nowrap text-sm", isCurrent ? "font-medium" : "hidden text-muted-foreground sm:inline")}>
+                                            {s.title}
+                                        </span>
+                                    </button>
+                                    {index < STEPS.length - 1 ? <span aria-hidden="true" className="h-px flex-1 bg-border" /> : null}
+                                </li>
+                            );
+                        })}
+                    </ol>
+                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                            className="h-full rounded-full bg-[#78B7D0] transition-all duration-300"
+                            style={{ width: `${(step / STEPS.length) * 100}%` }}
                         />
                     </div>
-                </div>
+                </nav>
 
-                <Card className="overflow-hidden">
-                    <CardContent className="p-6">
-                        <AnimatePresence mode="wait">
-                            {step === 1 && (
-                                <motion.div key="s1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                                    <StepTitle title="بيانات المستند" subtitle="نبدأ بالأساسيات: النوع، العميل، والمشروع." />
+                <SectionCard title={current.title} description={current.description}>
+                    <div key={step} className="space-y-6 p-5 animate-in fade-in-0 duration-200">
+                        {step === 1 && (
+                            <>
+                                <div className="space-y-2">
+                                    <Label>Document type</Label>
+                                    <SegmentedTabs<DocumentType>
+                                        aria-label="Document type"
+                                        value={data.documentType}
+                                        onChange={(v) => update("documentType", v)}
+                                        options={[
+                                            { value: "quotation", label: "Quotation" },
+                                            { value: "invoice", label: "Invoice" },
+                                        ]}
+                                    />
+                                </div>
 
-                                    <div className="space-y-2">
-                                        <Label>نوع المستند</Label>
-                                        <Segmented<DocumentType>
-                                            value={data.documentType}
-                                            onChange={(v) => update("documentType", v)}
-                                            options={[
-                                                { value: "quotation", label: "عرض سعر" },
-                                                { value: "invoice", label: "فاتورة" },
-                                            ]}
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label id="docNumberLabel">رقم المستند</Label>
+                                            <Label id="docNumberLabel">Document number</Label>
                                             <div
                                                 role="status"
                                                 aria-labelledby="docNumberLabel"
                                                 className="flex h-9 items-center justify-between rounded-md border border-dashed bg-muted/50 px-3 text-sm"
                                             >
-                                                <span dir="ltr" className="font-bold tabular-nums">
-                                                    {data.docNumber}
-                                                </span>
+                                                <span className="font-semibold tabular-nums">{data.docNumber}</span>
                                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <Lock className="h-3 w-3" /> تلقائي
+                                                    <Lock className="h-3 w-3" /> Assigned automatically
                                                 </span>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="issueDate">التاريخ</Label>
-                                            <Input id="issueDate" type="date" dir="ltr" className="text-right" aria-invalid={!dateValid} value={data.issueDate} onChange={(e) => update("issueDate", e.target.value)} />
+                                            <Label htmlFor="issueDate">Issue date</Label>
+                                            <Input id="issueDate" type="date" aria-invalid={!dateValid} value={data.issueDate} onChange={(e) => update("issueDate", e.target.value)} />
                                         </div>
                                     </div>
-
-                                    <p className="-mt-3 text-xs text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground">
                                         {editing
-                                            ? "رقم المستند ثابت ولا يمكن تغييره بعد الحفظ."
-                                            : "يُعطى الرقم تلقائياً بالتسلسل عند الحفظ، ويظهر نفسه في المستند وفي القائمة."}
+                                            ? "The number is fixed once the document is saved."
+                                            : "Numbers are assigned in sequence when you save and appear on the document and in the list."}
                                     </p>
+                                </div>
 
-                                    <div className="space-y-2">
-                                        <Label htmlFor="clientName">من هو العميل؟</Label>
-                                        <Input id="clientName" placeholder="اسم الجهة أو الشخص" value={data.clientName} onChange={(e) => update("clientName", e.target.value)} autoFocus />
-                                    </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="clientName">Client</Label>
+                                    <Input
+                                        id="clientName"
+                                        dir="auto"
+                                        placeholder="Organization or person"
+                                        value={data.clientName}
+                                        onChange={(e) => update("clientName", e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
 
-                                    <div className="space-y-2">
-                                        <Label htmlFor="projectName">ما اسم المشروع؟</Label>
-                                        <Input id="projectName" placeholder="مثال: حفل تكريم الطلبة المتفوقين" value={data.projectName} onChange={(e) => update("projectName", e.target.value)} />
-                                    </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="projectName">Project</Label>
+                                    <Input
+                                        id="projectName"
+                                        dir="auto"
+                                        placeholder="e.g. حفل تكريم الطلبة المتفوقين"
+                                        value={data.projectName}
+                                        onChange={(e) => update("projectName", e.target.value)}
+                                    />
+                                </div>
 
-                                    <div className="space-y-2">
-                                        <Label htmlFor="category">عنوان الخدمة (اختياري)</Label>
-                                        <Input id="category" list="invoice-categories" placeholder="مثال: الإنتاج المسرحي" value={data.category} onChange={(e) => update("category", e.target.value)} />
-                                        <datalist id="invoice-categories">
-                                            {categories.map((c) => (
-                                                <option key={c} value={c} />
-                                            ))}
-                                        </datalist>
-                                    </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="category">Service heading (optional)</Label>
+                                    <Input
+                                        id="category"
+                                        dir="auto"
+                                        list="invoice-categories"
+                                        placeholder="e.g. الإنتاج المسرحي"
+                                        value={data.category}
+                                        onChange={(e) => update("category", e.target.value)}
+                                    />
+                                    <datalist id="invoice-categories">
+                                        {categories.map((c) => (
+                                            <option key={c} value={c} />
+                                        ))}
+                                    </datalist>
+                                </div>
 
-                                    <div className="space-y-2">
-                                        <Label>القالب</Label>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {TEMPLATES.map((t) => (
+                                <div className="space-y-2">
+                                    <Label>Template</Label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {TEMPLATES.map((t) => {
+                                            const meta = TEMPLATE_LABELS_EN[t.key];
+                                            const selected = data.template === t.key;
+                                            return (
                                                 <button
                                                     key={t.key}
                                                     type="button"
-                                                    aria-label={`قالب ${t.label}`}
-                                                    aria-pressed={data.template === t.key}
+                                                    aria-label={`${meta.label} template`}
+                                                    aria-pressed={selected}
                                                     onClick={() => update("template", t.key)}
                                                     className={cn(
-                                                        "rounded-lg border p-3 text-right transition-all",
-                                                        data.template === t.key ? "border-[#78B7D0] ring-2 ring-[#78B7D0]/40 bg-[#78B7D0]/10" : "hover:bg-muted/60"
+                                                        "rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                                        selected ? "border-[#78B7D0] ring-2 ring-[#78B7D0]/40 bg-[#78B7D0]/10" : "hover:bg-muted/60"
                                                     )}
                                                 >
                                                     <div
-                                                        className="h-10 rounded mb-2 bg-cover bg-top"
+                                                        className="mb-2 h-10 rounded bg-cover bg-top"
                                                         style={
                                                             t.key === "navy"
                                                                 ? { background: "radial-gradient(circle at 78% -10%, #0c3047, #021526 62%)" }
                                                                 : { backgroundImage: `url(/invoice/hero-${t.key}.jpg)` }
                                                         }
                                                     />
-                                                    <div className="text-sm font-bold">{t.label}</div>
-                                                    <div className="text-[11px] text-muted-foreground leading-snug">{t.hint}</div>
+                                                    <div className="text-sm font-medium">{meta.label}</div>
+                                                    <div className="text-[11px] leading-snug text-muted-foreground">{meta.hint}</div>
                                                 </button>
-                                            ))}
-                                        </div>
+                                            );
+                                        })}
                                     </div>
-                                </motion.div>
-                            )}
+                                </div>
+                            </>
+                        )}
 
-                            {step === 2 && (
-                                <motion.div key="s2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                                    <StepTitle title="الخدمات" subtitle="أضف الخدمات المطلوبة ووصف كل منها وتكلفتها." />
-
-                                    <div className="space-y-4 p-4 bg-secondary/40 rounded-lg border">
+                        {step === 2 && (
+                            <>
+                                <div className="space-y-4 rounded-lg border bg-muted/40 p-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="itemDescription">Description</Label>
+                                        <Textarea
+                                            id="itemDescription"
+                                            rows={4}
+                                            dir="auto"
+                                            placeholder={"e.g.\nحضور وتقديم الحفل\nيوم الأربعاء 23 سبتمبر الساعة 8 م"}
+                                            value={draft.description}
+                                            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                                        />
+                                        <p className="text-xs text-muted-foreground">Each new line becomes its own line on the document.</p>
+                                    </div>
+                                    <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label htmlFor="itemDescription">الوصف</Label>
-                                            <Textarea
-                                                id="itemDescription"
-                                                rows={4}
-                                                placeholder={"مثال:\nحضور وتقديم الحفل\nيوم الأربعاء 23 سبتمبر الساعة 8 م"}
-                                                value={draft.description}
-                                                onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                                            <Label htmlFor="itemPrice">Price ({data.currency})</Label>
+                                            <Input
+                                                id="itemPrice"
+                                                type="number"
+                                                min={0}
+                                                step="any"
+                                                placeholder="0"
+                                                value={draft.price}
+                                                onChange={(e) => setDraft({ ...draft, price: e.target.value })}
+                                                onKeyDown={commitOnEnter}
                                             />
-                                            <p className="text-xs text-muted-foreground">كل سطر جديد يظهر كسطر مستقل في المستند.</p>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="itemPrice">السعر ({symbol})</Label>
-                                                <Input
-                                                    id="itemPrice"
-                                                    type="number"
-                                                    min={0}
-                                                    step="any"
-                                                    dir="ltr"
-                                                    className="text-right"
-                                                    placeholder="0"
-                                                    value={draft.price}
-                                                    onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), commitItem())}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="itemQty">الكمية</Label>
-                                                <Input
-                                                    id="itemQty"
-                                                    type="number"
-                                                    min={0}
-                                                    step="any"
-                                                    dir="ltr"
-                                                    className="text-right"
-                                                    value={draft.quantity}
-                                                    onChange={(e) => setDraft({ ...draft, quantity: e.target.value })}
-                                                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), commitItem())}
-                                                />
-                                            </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="itemQty">Quantity</Label>
+                                            <Input
+                                                id="itemQty"
+                                                type="number"
+                                                min={0}
+                                                step="any"
+                                                value={draft.quantity}
+                                                onChange={(e) => setDraft({ ...draft, quantity: e.target.value })}
+                                                onKeyDown={commitOnEnter}
+                                            />
                                         </div>
-                                        <Button onClick={commitItem} className="w-full gap-2" disabled={!draftValid}>
-                                            {editingItemId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                                            {editingItemId ? "تحديث الخدمة" : "إضافة الخدمة"}
-                                        </Button>
                                     </div>
+                                    <Button onClick={commitItem} className="w-full gap-2" disabled={!draftValid}>
+                                        {editingItemId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                        {editingItemId ? "Update service" : "Add service"}
+                                    </Button>
+                                </div>
 
+                                <div className="space-y-2">
+                                    <p className="text-sm font-medium">Services added ({data.items.length})</p>
                                     <div className="space-y-2">
-                                        <Label>الخدمات المضافة ({data.items.length})</Label>
-                                        <div className="space-y-2">
-                                            {data.items.map((item) => (
-                                                <div
-                                                    key={item.id}
-                                                    className={cn(
-                                                        "flex items-start justify-between gap-3 p-3 bg-card border rounded-lg shadow-sm",
-                                                        editingItemId === item.id && "border-[#78B7D0]"
-                                                    )}
-                                                >
-                                                    <div className="min-w-0">
-                                                        <p className="font-medium whitespace-pre-line break-words">{item.description}</p>
-                                                        <p className="text-sm text-muted-foreground mt-1">
-                                                            {item.quantity} × {formatMoney(item.price, data.currency, "latin")}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex shrink-0">
-                                                        <Button variant="ghost" size="icon" onClick={() => editItem(item)} title="تعديل">
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" title="حذف">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {data.items.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">لم تتم إضافة أي خدمة بعد.</p> : null}
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-
-                            {step === 3 && (
-                                <motion.div key="s3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                                    <StepTitle title="المراجعة النهائية" subtitle="راجع التفاصيل وطبّق الخصم إن وجد." />
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="currency">العملة</Label>
-                                            <select
-                                                id="currency"
-                                                value={data.currency}
-                                                onChange={(e) => update("currency", e.target.value)}
-                                                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        {data.items.map((item) => (
+                                            <div
+                                                key={item.id}
+                                                className={cn(
+                                                    "flex items-start justify-between gap-3 rounded-lg border bg-card p-3",
+                                                    editingItemId === item.id && "border-[#78B7D0]"
+                                                )}
                                             >
-                                                {CURRENCIES.map((c) => (
-                                                    <option key={c.code} value={c.code}>
-                                                        {c.label} ({c.symbol})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                                <div className="min-w-0">
+                                                    <p dir="auto" className="whitespace-pre-line break-words text-left font-medium">
+                                                        {item.description}
+                                                    </p>
+                                                    <p className="mt-1 text-sm text-muted-foreground">
+                                                        {item.quantity} × {formatAmount(item.price, data.currency)}
+                                                    </p>
+                                                </div>
+                                                <div className="flex shrink-0">
+                                                    <Button variant="ghost" size="icon" onClick={() => editItem(item)} title="Edit" aria-label="Edit service">
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => removeItem(item.id)}
+                                                        className="text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                                                        title="Remove"
+                                                        aria-label="Remove service"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {data.items.length === 0 ? (
+                                            <p className="py-4 text-center text-sm text-muted-foreground">No services added yet.</p>
+                                        ) : null}
                                     </div>
+                                </div>
+                            </>
+                        )}
 
-                                    <div className="space-y-3">
-                                        <Label>الخصم</Label>
-                                        <Segmented<"percentage" | "amount">
-                                            value={discountMode}
-                                            onChange={(mode) => {
-                                                setDiscountMode(mode);
-                                                if (mode === "amount") setTargetAmount(String(totals.total));
-                                            }}
-                                            options={[
-                                                { value: "percentage", label: "نسبة مئوية (٪)" },
-                                                { value: "amount", label: "المبلغ النهائي" },
-                                            ]}
-                                        />
-                                        <div className="flex items-center gap-3">
-                                            {discountMode === "percentage" ? (
-                                                <>
-                                                    <Input
-                                                        type="number"
-                                                        min={0}
-                                                        max={100}
-                                                        step="any"
-                                                        dir="ltr"
-                                                        className="max-w-[140px] text-right"
-                                                        value={data.discount || ""}
-                                                        placeholder="0"
-                                                        onChange={(e) => update("discount", Math.max(0, Math.min(100, Number(e.target.value))))}
-                                                    />
-                                                    <span className="text-muted-foreground text-sm">أدخل النسبة من 0 إلى 100</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Input type="number" min={0} step="any" dir="ltr" className="max-w-[140px] text-right" value={targetAmount} onChange={(e) => setTargetAmount(e.target.value)} />
-                                                    <span className="text-muted-foreground text-sm">
-                                                        المبلغ بعد الخصم (المجموع: {formatMoney(totals.subtotal, data.currency, "latin")})
-                                                    </span>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-
+                        {step === 3 && (
+                            <>
+                                <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="notes">ملاحظات</Label>
-                                        <Textarea id="notes" rows={3} placeholder="أي ملاحظات أو شروط إضافية تظهر في المستند..." value={data.notes} onChange={(e) => update("notes", e.target.value)} />
+                                        <Label htmlFor="currency">Currency</Label>
+                                        <Select value={data.currency} onValueChange={(v) => update("currency", v)}>
+                                            <SelectTrigger id="currency">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {CURRENCIES.map((c) => (
+                                                    <SelectItem key={c.code} value={c.code}>
+                                                        {c.code} — {currencyLabelEn(c.code)}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
+                                </div>
 
-                                    <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 space-y-2">
-                                        <SummaryRow label="المجموع" value={formatMoney(totals.subtotal, data.currency, "latin")} />
-                                        <SummaryRow
-                                            label={`الخصم (${Number(data.discount.toFixed(2))}٪)`}
-                                            value={`- ${formatMoney(totals.discountAmount, data.currency, "latin")}`}
-                                            muted
-                                        />
-                                        <div className="flex justify-between font-bold text-lg pt-2 border-t border-primary/10 text-primary">
-                                            <span>الإجمالي</span>
-                                            <span>{formatMoney(totals.total, data.currency, "latin")}</span>
-                                        </div>
+                                <div className="space-y-3">
+                                    <Label>Discount</Label>
+                                    <SegmentedTabs<"percentage" | "amount">
+                                        aria-label="Discount mode"
+                                        value={discountMode}
+                                        onChange={(mode) => {
+                                            setDiscountMode(mode);
+                                            if (mode === "amount") setTargetAmount(String(totals.total));
+                                        }}
+                                        options={[
+                                            { value: "percentage", label: "Percentage" },
+                                            { value: "amount", label: "Final amount" },
+                                        ]}
+                                    />
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        {discountMode === "percentage" ? (
+                                            <>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    step="any"
+                                                    aria-label="Discount percentage"
+                                                    className="max-w-[140px]"
+                                                    value={data.discount || ""}
+                                                    placeholder="0"
+                                                    onChange={(e) => update("discount", Math.max(0, Math.min(100, Number(e.target.value))))}
+                                                />
+                                                <span className="text-sm text-muted-foreground">Enter a percentage from 0 to 100</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    step="any"
+                                                    aria-label="Final amount"
+                                                    className="max-w-[140px]"
+                                                    value={targetAmount}
+                                                    onChange={(e) => setTargetAmount(e.target.value)}
+                                                />
+                                                <span className="text-sm text-muted-foreground">
+                                                    Amount after discount (subtotal: {formatAmount(totals.subtotal, data.currency)})
+                                                </span>
+                                            </>
+                                        )}
                                     </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </CardContent>
+                                </div>
 
-                    <div className="p-4 sm:p-6 border-t bg-muted/20 flex flex-wrap gap-3 justify-between">
+                                <div className="space-y-2">
+                                    <Label htmlFor="notes">Notes</Label>
+                                    <Textarea
+                                        id="notes"
+                                        rows={3}
+                                        dir="auto"
+                                        placeholder="Notes or extra terms shown on the document…"
+                                        value={data.notes}
+                                        onChange={(e) => update("notes", e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
+                                    <SummaryRow label="Subtotal" value={formatAmount(totals.subtotal, data.currency)} />
+                                    <SummaryRow
+                                        label={`Discount (${Number(data.discount.toFixed(2))}%)`}
+                                        value={`- ${formatAmount(totals.discountAmount, data.currency)}`}
+                                        muted
+                                    />
+                                    <div className="flex justify-between border-t pt-2 text-base font-semibold">
+                                        <span>Total</span>
+                                        <span className="tabular-nums">{formatAmount(totals.total, data.currency)}</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-5 py-4">
                         <Button variant="outline" onClick={() => setStep((s) => s - 1)} disabled={step === 1} className="gap-2">
-                            <ArrowRight className="h-4 w-4" /> السابق
+                            <ArrowLeft className="h-4 w-4" /> Back
                         </Button>
 
                         {step < 3 ? (
-                            <Button onClick={() => setStep((s) => s + 1)} disabled={(step === 1 && !stepOneValid) || (step === 2 && data.items.length === 0)} className="gap-2">
-                                التالي <ArrowLeft className="h-4 w-4" />
+                            <Button
+                                onClick={() => setStep((s) => s + 1)}
+                                disabled={(step === 1 && !stepOneValid) || (step === 2 && data.items.length === 0)}
+                                className="gap-2"
+                            >
+                                Next <ArrowRight className="h-4 w-4" />
                             </Button>
                         ) : (
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" onClick={() => save(false)} disabled={!canSave || busy !== null} className="gap-2">
                                     {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                    حفظ
+                                    Save
                                 </Button>
-                                <Button onClick={() => save(true)} disabled={!canSave || busy !== null} className="gap-2 bg-[#021526] hover:bg-[#0c3047] text-white dark:bg-[#78B7D0] dark:hover:bg-[#9ccbe0] dark:text-[#021526]">
+                                <Button onClick={() => save(true)} disabled={!canSave || busy !== null} className="gap-2">
                                     {busy === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                                    حفظ وتحميل PDF
+                                    Save &amp; download PDF
                                 </Button>
                             </div>
                         )}
                     </div>
-                </Card>
+                </SectionCard>
             </div>
 
             {/* ---------- Live preview ---------- */}
             <div className="min-w-0 lg:sticky lg:top-4">
-                <div className="mb-2 text-sm font-medium text-muted-foreground">معاينة مباشرة</div>
-                <div className="rounded-xl bg-muted/40 p-3 sm:p-5">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Live preview</p>
+                <div className="rounded-xl border bg-muted/30 p-3 sm:p-5">
                     <ScaledPreview>
                         <InvoiceDocument
                             ref={docRef}
@@ -542,40 +626,11 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
     );
 }
 
-function StepTitle({ title, subtitle }: { title: string; subtitle: string }) {
-    return (
-        <div className="space-y-1">
-            <h2 className="text-2xl font-bold text-primary">{title}</h2>
-            <p className="text-muted-foreground">{subtitle}</p>
-        </div>
-    );
-}
-
 function SummaryRow({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
     return (
         <div className={cn("flex justify-between text-sm", muted && "text-muted-foreground")}>
             <span>{label}</span>
-            <span>{value}</span>
-        </div>
-    );
-}
-
-function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (value: T) => void; options: { value: T; label: string }[] }) {
-    return (
-        <div className="flex items-center p-1 bg-secondary rounded-lg w-fit">
-            {options.map((option) => (
-                <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => onChange(option.value)}
-                    className={cn(
-                        "px-4 py-2 text-sm font-medium rounded-md transition-all",
-                        value === option.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    {option.label}
-                </button>
-            ))}
+            <span className="tabular-nums">{value}</span>
         </div>
     );
 }

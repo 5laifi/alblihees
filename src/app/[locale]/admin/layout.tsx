@@ -199,6 +199,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Print view of an invoice: still auth-gated, but rendered without the admin chrome
     const isPrintPage = pathname.includes("/admin/invoices/print/");
 
+    // The console is English and left-to-right, but the /ar locale sets dir="rtl"
+    // on <html>. Portaled overlays (dialogs, menus, toasts) and the print view
+    // render outside this layout's wrapper, so the direction is set on <html>
+    // while any admin route is mounted and restored on the way out.
+    useEffect(() => {
+        const root = document.documentElement;
+        const previous = root.getAttribute("dir");
+        root.setAttribute("dir", "ltr");
+        return () => {
+            if (previous) root.setAttribute("dir", previous);
+            else root.removeAttribute("dir");
+        };
+    }, []);
+
     useEffect(() => {
         // Public pages render before authState is consulted, so no check is needed.
         if (isPublicAdminPage) return;
