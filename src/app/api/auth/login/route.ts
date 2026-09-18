@@ -68,16 +68,18 @@ export async function POST(request: Request) {
                 return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
             }
 
-            // Hash and store the ENV password for future use
+            // Verify against a fresh hash of the ENV password (constant-time via bcrypt)
             const salt = await bcrypt.genSalt(12);
             const hash = await bcrypt.hash(envPassword, salt);
-
-            // Throws if the hash cannot be stored, so the ENV password is only ever
-            // accepted when first-time setup actually completes.
-            await setAdminSecret(supabase, "admin_password_hash", hash);
-
-            // Now verify against the hash
             isValid = await bcrypt.compare(password, hash);
+
+            // Store the hash only after a SUCCESSFUL login, never on a failed attempt:
+            // a hash in admin_secrets must mean "an admin logged in through this code".
+            // Throws if it cannot be stored, so the ENV password is only ever accepted
+            // when first-time setup actually completes.
+            if (isValid) {
+                await setAdminSecret(supabase, "admin_password_hash", hash);
+            }
         }
 
         if (!isValid) {

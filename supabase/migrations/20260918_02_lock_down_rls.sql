@@ -9,6 +9,9 @@
 --
 -- Run in: Supabase Dashboard > SQL Editor. Everything is in one transaction: if
 -- any statement fails, nothing is changed. Safe to run more than once.
+-- The editor will warn that the query is destructive (it drops policies and
+-- deletes rows): that is expected, confirm it. On success the result is one row
+-- saying "Lockdown applied". An error means nothing was changed.
 --
 -- End state for the anon / publishable key:
 --   services, experience_stats, experience_timeline,
@@ -16,15 +19,24 @@
 --   site_settings ............................... SELECT of 3 public keys only
 --   contact_submissions ......................... INSERT only (no read)
 --   admin_secrets ............................... nothing
+--   invoices, invoice_settings (if present) ..... nothing
 -- ============================================================================
 
 BEGIN;
 
+-- Policy changes need a brief exclusive lock on each table. If something else
+-- holds a lock, give up after 5 seconds (nothing changed, just run it again)
+-- rather than making the live site's reads queue up behind this script.
+SET LOCAL lock_timeout = '5s';
+
 -- 0. Safety interlock: refuse to run until the new code is proven live.
 --    Only the new code, running with SUPABASE_SERVICE_ROLE_KEY, can write to
---    admin_secrets, and it does so on the first successful admin login. A hash
---    in that table therefore proves the deploy and the key both work. Without
---    that proof this migration would lock the old code out of the database.
+--    admin_secrets, and it stores the hash only after a SUCCESSFUL admin login.
+--    A hash there proves the new code and the key work against this database.
+--    It does not prove WHERE that login happened (a preview deployment or a
+--    local run with the key would also do it), so make that login on the live
+--    site, www.alblaihees.com. Without the new code live, this migration would
+--    lock the old code out of the database.
 DO $$
 BEGIN
     IF to_regclass('public.admin_secrets') IS NULL THEN
@@ -39,8 +51,8 @@ END $$;
 -- 1. Drop EVERY existing policy on the application tables, whatever it is called.
 --    This removes all "Anon manage ..." policies and "Public read site_settings",
 --    and also anything added by hand in the dashboard under another name, so the
---    end state is known instead of assumed. Each dropped policy is listed under
---    "Messages" in the SQL editor.
+--    end state is known instead of assumed. (The Supabase editor does not show
+--    which ones were dropped; 20260918_03_verify.sql shows what is left.)
 DO $$
 DECLARE
     p record;
@@ -95,8 +107,11 @@ CREATE POLICY "Public read public site_settings" ON public.site_settings
     USING (key IN ('maintenance_mode', 'show_partners', 'hero_video_url'));
 
 -- 5. contact_submissions: the public may insert, never read, update or delete.
---    The limits mirror the validation in src/app/api/contact/route.ts, so the
---    policy cannot be used to bypass them (oversized rows, pre-read messages).
+--    The website itself no longer needs this policy (the contact route inserts
+--    with the server key); it is kept as requested. The limits follow the route's
+--    validation so direct inserts cannot be oversized or pre-marked as read.
+--    They cannot enforce the route's rate limit: to close that too, delete this
+--    policy and the GRANT INSERT in step 7.
 CREATE POLICY "Public insert contact" ON public.contact_submissions
     FOR INSERT TO anon, authenticated
     WITH CHECK (
@@ -126,6 +141,29 @@ TO anon, authenticated;
 
 GRANT INSERT ON public.contact_submissions TO anon, authenticated;
 
+-- The server key must keep full access. State it instead of relying on the
+-- grants Supabase made implicitly when the tables were created.
+GRANT ALL ON
+    public.services, public.experience_stats, public.experience_timeline,
+    public.organizations, public.media_items, public.profile,
+    public.site_settings, public.contact_submissions, public.admin_secrets
+TO service_role;
+
+-- Invoice tables (present once supabase-invoices.sql has been run): RLS with no
+-- policies already keeps them closed; remove the public table grants as well.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['invoices', 'invoice_settings'] LOOP
+        IF to_regclass('public.' || t) IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+            EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC, anon, authenticated', t);
+            EXECUTE format('GRANT ALL ON public.%I TO service_role', t);
+        END IF;
+    END LOOP;
+END $$;
+
 -- 8. Remove any credential rows from site_settings. Credentials live only in
 --    admin_secrets now, and a row found here was never trusted or copied.
 DELETE FROM public.site_settings
@@ -137,3 +175,4 @@ COMMIT;
 NOTIFY pgrst, 'reload schema';
 
 -- Now run 20260918_03_verify.sql and compare the output with the table in it.
+SELECT 'Lockdown applied. Now run 20260918_03_verify.sql' AS result;

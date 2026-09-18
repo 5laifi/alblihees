@@ -6,17 +6,21 @@
 --
 -- Expected for schema "public":
 --
---   table                 rls    policies                                  anon_grants
---   --------------------  -----  ----------------------------------------  -----------
---   admin_secrets         true   (none: server-only)                       (none)
---   contact_submissions   true   Public insert contact [INSERT]            INSERT
---   experience_stats      true   Public read experience_stats [SELECT]     SELECT
---   experience_timeline   true   Public read experience_timeline [SELECT]  SELECT
---   media_items           true   Public read media_items [SELECT]          SELECT
---   organizations         true   Public read organizations [SELECT]        SELECT
---   profile               true   Public read profile [SELECT]              SELECT
---   services              true   Public read services [SELECT]             SELECT
---   site_settings         true   Public read public site_settings [SELECT] SELECT
+--   table                 rls    policies (each ends "to anon,authenticated")   anon_grants
+--   --------------------  -----  ---------------------------------------------  -----------
+--   admin_secrets         true   (none: server-only)                            (none)
+--   contact_submissions   true   Public insert contact [INSERT] ...             INSERT
+--   experience_stats      true   Public read experience_stats [SELECT] ...      SELECT
+--   experience_timeline   true   Public read experience_timeline [SELECT] ...   SELECT
+--   invoice_settings      true   (none: server-only)                            (none)
+--   invoices              true   (none: server-only)                            (none)
+--   media_items           true   Public read media_items [SELECT] ...           SELECT
+--   organizations         true   Public read organizations [SELECT] ...         SELECT
+--   profile               true   Public read profile [SELECT] ...               SELECT
+--   services              true   Public read services [SELECT] ...              SELECT
+--   site_settings         true   Public read public site_settings [SELECT] ...  SELECT
+--
+-- (invoices / invoice_settings only appear if the invoices module is installed.)
 --
 -- Anything else needs a look:
 --   * a public table that is NOT in the list above (it was not covered by the

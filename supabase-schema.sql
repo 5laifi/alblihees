@@ -169,7 +169,11 @@ GRANT SELECT ON services, experience_stats, experience_timeline, organizations, 
     profile, site_settings
 TO anon, authenticated;
 GRANT INSERT ON contact_submissions TO anon, authenticated;
-GRANT ALL ON admin_secrets TO service_role;
+-- The server key needs every table. Stated explicitly: newer Supabase projects
+-- do not grant table privileges automatically.
+GRANT ALL ON services, experience_stats, experience_timeline, organizations, media_items,
+    profile, site_settings, contact_submissions, admin_secrets
+TO service_role;
 
 -- ============================================
 -- SEED DATA
