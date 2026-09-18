@@ -20,16 +20,19 @@
 
 BEGIN;
 
--- 0. Safety checks: refuse to run if step 1 was skipped.
+-- 0. Safety interlock: refuse to run until the new code is proven live.
+--    Only the new code, running with SUPABASE_SERVICE_ROLE_KEY, can write to
+--    admin_secrets, and it does so on the first successful admin login. A hash
+--    in that table therefore proves the deploy and the key both work. Without
+--    that proof this migration would lock the old code out of the database.
 DO $$
 BEGIN
     IF to_regclass('public.admin_secrets') IS NULL THEN
         RAISE EXCEPTION 'admin_secrets does not exist. Run 20260918_01_admin_secrets.sql first.';
     END IF;
 
-    IF EXISTS (SELECT 1 FROM public.site_settings WHERE key = 'admin_password_hash' AND value <> '')
-       AND NOT EXISTS (SELECT 1 FROM public.admin_secrets WHERE key = 'admin_password_hash') THEN
-        RAISE EXCEPTION 'The admin password hash was never copied to admin_secrets. Run 20260918_01_admin_secrets.sql first.';
+    IF NOT EXISTS (SELECT 1 FROM public.admin_secrets WHERE key = 'admin_password_hash' AND value <> '') THEN
+        RAISE EXCEPTION 'No admin password hash in admin_secrets yet. Deploy the new code, log in to the live admin panel once, then run this file again. Nothing was changed.';
     END IF;
 END $$;
 
@@ -123,8 +126,8 @@ TO anon, authenticated;
 
 GRANT INSERT ON public.contact_submissions TO anon, authenticated;
 
--- 8. Remove the credentials from site_settings. They now live in admin_secrets.
---    (Old reset tokens were never copied across, so this also burns them.)
+-- 8. Remove any credential rows from site_settings. Credentials live only in
+--    admin_secrets now, and a row found here was never trusted or copied.
 DELETE FROM public.site_settings
 WHERE key IN ('admin_password_hash', 'password_reset_token', 'password_reset_expires');
 

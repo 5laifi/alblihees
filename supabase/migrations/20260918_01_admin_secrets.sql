@@ -5,10 +5,6 @@
 -- the live site keeps working exactly as before after this runs.
 --
 -- Run in: Supabase Dashboard > SQL Editor. Safe to run more than once.
---
--- Do NOT change the admin password between running this file and deploying the
--- new code: the old code would write the new hash to site_settings, and the
--- copy made here would be stale.
 -- ============================================================================
 
 BEGIN;
@@ -29,26 +25,18 @@ ALTER TABLE public.admin_secrets ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.admin_secrets FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.admin_secrets TO service_role;
 
--- Copy the admin password hash across. DO NOTHING on conflict so re-running this
--- file after the new code is live can never roll the password back.
---
--- Password reset tokens are deliberately NOT copied: they were publicly readable,
--- so any outstanding token is treated as compromised. Request a new reset email
--- after the rollout if you need one.
-INSERT INTO public.admin_secrets (key, value)
-SELECT key, value
-FROM public.site_settings
-WHERE key = 'admin_password_hash'
-  AND value <> ''
-ON CONFLICT (key) DO NOTHING;
+-- Nothing is copied from site_settings, on purpose. That table is writable with
+-- the public key until step 2 runs, so an admin_password_hash row found there
+-- cannot be trusted: copying it could install an attacker's password. Instead,
+-- the first admin login after the new code is deployed stores a fresh hash of
+-- the ADMIN_PASSWORD environment variable here (first-time setup in
+-- src/app/api/auth/login/route.ts). Log in with that password once, then change
+-- it from Admin > Settings.
 
 COMMIT;
 
 -- Make the API layer (PostgREST) pick up the new table immediately.
 NOTIFY pgrst, 'reload schema';
 
--- Expected result: one row, has_password_hash = true
--- (false is only correct if nobody has ever logged in to the admin panel).
-SELECT EXISTS (
-    SELECT 1 FROM public.admin_secrets WHERE key = 'admin_password_hash'
-) AS has_password_hash;
+-- Expected result: one row, admin_secrets_ready = true
+SELECT to_regclass('public.admin_secrets') IS NOT NULL AS admin_secrets_ready;
