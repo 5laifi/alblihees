@@ -5,6 +5,8 @@ import crypto from "crypto";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "Tharii@me.com";
+// Must be an address on a domain verified in Resend
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "noreply@alblaihees.com";
 
 // Rate limiter for forgot-password
 const resetAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -65,9 +67,9 @@ export async function POST(request: Request) {
         const siteUrl = process.env.SITE_URL || "https://tharialblaihees.com";
         const resetUrl = `${siteUrl}/en/admin/reset-password?token=${resetToken}`;
 
-        // Send email
-        await resend.emails.send({
-            from: "Dhari Admin <onboarding@resend.dev>",
+        // Send email (the SDK returns errors instead of throwing)
+        const { error: sendError } = await resend.emails.send({
+            from: `Dhari Admin <${FROM_EMAIL}>`,
             to: ADMIN_EMAIL,
             subject: "Admin Password Reset Request",
             html: `
@@ -83,14 +85,19 @@ export async function POST(request: Request) {
             `,
         });
 
+        if (sendError) {
+            console.error("Password reset email error:", sendError);
+            return NextResponse.json({ error: "Could not send the reset email. Please try again later." }, { status: 500 });
+        }
+
         return NextResponse.json({ success: true, message: "If the email matches the admin account, a reset link was sent." });
-    } catch (e: any) {
+    } catch {
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }
 
 // Helper to upsert settings securely
-async function saveOrUpdateSetting(supabase: any, key: string, value: string) {
+async function saveOrUpdateSetting(supabase: ReturnType<typeof createServerSupabaseClient>, key: string, value: string) {
     const { data: existing } = await supabase.from("site_settings").select("id").eq("key", key).single();
     if (existing) {
         await supabase.from("site_settings").update({ value }).eq("key", key);
