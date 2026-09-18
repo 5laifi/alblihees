@@ -107,4 +107,9 @@
   .dark body {
     background-image: radial-gradient(circle at 50% -20%, #0c3047, #021526);
   }
+
+  /* Admin console is authored in English: prefer Inter, fall back to Tajawal for Arabic glyphs */
+  .admin-shell {
+    font-family: var(--font-inter), var(--font-tajawal), ui-sans-serif, system-ui, sans-serif;
+  }
 }
