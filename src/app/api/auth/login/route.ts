@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { cookies } from "next/headers";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
+import { getAdminSecret, setAdminSecret } from "@/lib/admin-secrets";
 import bcrypt from "bcryptjs";
 
 // Simple in-memory rate limiter (per-instance, resets on cold start)
@@ -48,20 +49,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Password is required" }, { status: 400 });
         }
 
-        const supabase = createServerSupabaseClient();
+        const supabase = createAdminSupabaseClient();
 
-        // Get the password hash from the database
-        const { data: settingsData } = await supabase
-            .from("site_settings")
-            .select("value")
-            .eq("key", "admin_password_hash")
-            .single();
+        // Get the password hash from the database. This throws on a database error,
+        // so a failed read can never be mistaken for "no password set yet".
+        const storedHash = await getAdminSecret(supabase, "admin_password_hash");
 
         let isValid = false;
 
-        if (settingsData && settingsData.value) {
+        if (storedHash) {
             // Always use bcrypt comparison
-            isValid = await bcrypt.compare(password, settingsData.value);
+            isValid = await bcrypt.compare(password, storedHash);
         } else {
             // First-time setup: hash the ENV password, store it, and verify
             const envPassword = process.env.ADMIN_PASSWORD;
@@ -74,9 +72,9 @@ export async function POST(request: Request) {
             const salt = await bcrypt.genSalt(12);
             const hash = await bcrypt.hash(envPassword, salt);
 
-            await supabase
-                .from("site_settings")
-                .insert({ key: "admin_password_hash", value: hash, type: "text" });
+            // Throws if the hash cannot be stored, so the ENV password is only ever
+            // accepted when first-time setup actually completes.
+            await setAdminSecret(supabase, "admin_password_hash", hash);
 
             // Now verify against the hash
             isValid = await bcrypt.compare(password, hash);
@@ -113,6 +111,7 @@ export async function POST(request: Request) {
         return response;
 
     } catch (error) {
+        console.error("Login error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

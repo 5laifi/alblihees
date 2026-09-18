@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
+import { setAdminSecret } from "@/lib/admin-secrets";
 import { Resend } from "resend";
 import crypto from "crypto";
 
@@ -50,19 +51,20 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Email service not configured. Please contact server administrator." }, { status: 500 });
         }
 
-        const supabase = createServerSupabaseClient();
+        const supabase = createAdminSupabaseClient();
 
         // Generate a random token
         const resetToken = crypto.randomBytes(32).toString("hex");
         // Token expires in 15 minutes
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-        // Save token and expiry to site_settings
-        await saveOrUpdateSetting(supabase, "password_reset_token", resetToken);
-        await saveOrUpdateSetting(supabase, "password_reset_expires", expiresAt);
+        // Save token and expiry to admin_secrets (never site_settings, which is partly public)
+        await setAdminSecret(supabase, "password_reset_token", resetToken);
+        await setAdminSecret(supabase, "password_reset_expires", expiresAt);
 
-        // Use SITE_URL env var instead of trusting the Host header
-        const siteUrl = process.env.SITE_URL || "https://tharialblaihees.com";
+        // Use SITE_URL env var instead of trusting the Host header.
+        // The fallback must be a domain we control: the reset token travels in this link.
+        const siteUrl = process.env.SITE_URL || "https://www.alblaihees.com";
         const resetUrl = `${siteUrl}/en/admin/reset-password?token=${resetToken}`;
 
         // Send email
@@ -84,17 +86,8 @@ export async function POST(request: Request) {
         });
 
         return NextResponse.json({ success: true, message: "If the email matches the admin account, a reset link was sent." });
-    } catch (e: any) {
+    } catch (e) {
+        console.error("Forgot password error:", e);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-    }
-}
-
-// Helper to upsert settings securely
-async function saveOrUpdateSetting(supabase: any, key: string, value: string) {
-    const { data: existing } = await supabase.from("site_settings").select("id").eq("key", key).single();
-    if (existing) {
-        await supabase.from("site_settings").update({ value }).eq("key", key);
-    } else {
-        await supabase.from("site_settings").insert({ key, value, type: "text" });
     }
 }

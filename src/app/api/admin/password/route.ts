@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
+import { getAdminSecret, setAdminSecret } from "@/lib/admin-secrets";
 import bcrypt from "bcryptjs";
 
 export async function PUT(request: Request) {
@@ -12,7 +13,7 @@ export async function PUT(request: Request) {
         const body = await request.json();
         const { currentPassword, newPassword } = body;
 
-        if (!currentPassword || !newPassword) {
+        if (!currentPassword || !newPassword || typeof currentPassword !== "string" || typeof newPassword !== "string") {
             return NextResponse.json({ error: "Current and new password are required" }, { status: 400 });
         }
 
@@ -20,21 +21,17 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
         }
 
-        const supabase = createServerSupabaseClient();
+        const supabase = createAdminSupabaseClient();
 
         // Get current password hash from database
-        const { data: settingsData } = await supabase
-            .from("site_settings")
-            .select("value")
-            .eq("key", "admin_password_hash")
-            .single();
+        const storedHash = await getAdminSecret(supabase, "admin_password_hash");
 
-        if (!settingsData || !settingsData.value) {
+        if (!storedHash) {
             return NextResponse.json({ error: "No password set. Please log in first to initialize." }, { status: 400 });
         }
 
         // Always use bcrypt comparison — no plaintext fallback
-        const isValid = await bcrypt.compare(currentPassword, settingsData.value);
+        const isValid = await bcrypt.compare(currentPassword, storedHash);
 
         if (!isValid) {
             return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
@@ -44,17 +41,11 @@ export async function PUT(request: Request) {
         const salt = await bcrypt.genSalt(12);
         const newPasswordHash = await bcrypt.hash(newPassword, salt);
 
-        const { error } = await supabase
-            .from("site_settings")
-            .update({ value: newPasswordHash })
-            .eq("key", "admin_password_hash");
-
-        if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
-        }
+        await setAdminSecret(supabase, "admin_password_hash", newPasswordHash);
 
         return NextResponse.json({ success: true, message: "Password updated successfully" });
-    } catch (e: any) {
+    } catch (e) {
+        console.error("Password change error:", e);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

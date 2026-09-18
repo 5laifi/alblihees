@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
 import { verifyAdmin, unauthorizedResponse } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
@@ -12,7 +12,7 @@ function revalidateExperience() {
 export async function GET(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "all";
 
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const body = await request.json();
     const { table, ...item } = body;
 
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const body = await request.json();
     const { table, id, ...updates } = body;
 
@@ -85,7 +85,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const table = searchParams.get("table");

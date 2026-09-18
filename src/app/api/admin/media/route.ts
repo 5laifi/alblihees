@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
 import { verifyAdmin, unauthorizedResponse } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
@@ -11,7 +11,7 @@ function revalidateMedia() {
 export async function GET() {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const { data, error } = await supabase
         .from("media_items")
         .select("*")
@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const body = await request.json();
 
     const { data, error } = await supabase
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -60,7 +60,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 

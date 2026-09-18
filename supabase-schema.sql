@@ -104,9 +104,21 @@ CREATE TABLE IF NOT EXISTS site_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 9. ADMIN SECRETS TABLE (server-only: password hash, reset token)
+-- Never store credentials in site_settings: part of that table is public.
+CREATE TABLE IF NOT EXISTS admin_secrets (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ============================================
 -- ROW LEVEL SECURITY POLICIES
 -- ============================================
+-- The anon / publishable key is public. It may only read public content and
+-- insert contact submissions. Everything else goes through API routes that
+-- verify the admin session and use SUPABASE_SERVICE_ROLE_KEY, which bypasses RLS.
+-- Existing databases: apply supabase/migrations/20260918_*.sql instead.
 
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE experience_stats ENABLE ROW LEVEL SECURITY;
@@ -116,31 +128,48 @@ ALTER TABLE media_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
+-- admin_secrets: RLS on and NO policies, on purpose. Server-only.
+ALTER TABLE admin_secrets ENABLE ROW LEVEL SECURITY;
 
 -- Public read access for content tables
-CREATE POLICY "Public read services" ON services FOR SELECT USING (true);
-CREATE POLICY "Public read experience_stats" ON experience_stats FOR SELECT USING (true);
-CREATE POLICY "Public read experience_timeline" ON experience_timeline FOR SELECT USING (true);
-CREATE POLICY "Public read organizations" ON organizations FOR SELECT USING (true);
-CREATE POLICY "Public read media_items" ON media_items FOR SELECT USING (true);
-CREATE POLICY "Public read profile" ON profile FOR SELECT USING (true);
-CREATE POLICY "Public read site_settings" ON site_settings FOR SELECT USING (true);
+CREATE POLICY "Public read services" ON services FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Public read experience_stats" ON experience_stats FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Public read experience_timeline" ON experience_timeline FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Public read organizations" ON organizations FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Public read media_items" ON media_items FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Public read profile" ON profile FOR SELECT TO anon, authenticated USING (true);
 
--- Public insert for contact submissions (anyone can submit)
-CREATE POLICY "Public insert contact" ON contact_submissions FOR INSERT WITH CHECK (true);
+-- site_settings: only the keys the public site reads. Add a key here when a
+-- public page needs a new setting.
+CREATE POLICY "Public read public site_settings" ON site_settings
+    FOR SELECT TO anon, authenticated
+    USING (key IN ('maintenance_mode', 'show_partners', 'hero_video_url'));
 
--- Service role full access (for API routes using service key)
--- Note: The anon key uses these policies. Admin operations go through 
--- API routes that verify JWT, then use Supabase with anon key but 
--- we enable insert/update/delete for anon as the API route handles auth.
-CREATE POLICY "Anon manage services" ON services FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage experience_stats" ON experience_stats FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage experience_timeline" ON experience_timeline FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage organizations" ON organizations FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage media_items" ON media_items FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage profile" ON profile FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage contact_submissions" ON contact_submissions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Anon manage site_settings" ON site_settings FOR ALL USING (true) WITH CHECK (true);
+-- Public insert for contact submissions (anyone can submit, nobody can read).
+-- Limits mirror the validation in src/app/api/contact/route.ts.
+CREATE POLICY "Public insert contact" ON contact_submissions
+    FOR INSERT TO anon, authenticated
+    WITH CHECK (
+        is_read = false
+        AND char_length(name) BETWEEN 1 AND 100
+        AND char_length(email) BETWEEN 3 AND 254
+        AND char_length(coalesce(phone, '')) <= 20
+        AND char_length(message) BETWEEN 1 AND 5000
+    );
+
+-- There are deliberately NO insert/update/delete policies for anon on any other
+-- table. Do not add "FOR ALL USING (true)" policies: the anon key is public, so
+-- that hands the whole database (including the admin login) to anyone.
+
+-- Table-level grants, as a second layer under RLS
+REVOKE ALL ON services, experience_stats, experience_timeline, organizations, media_items,
+    profile, site_settings, contact_submissions, admin_secrets
+FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON services, experience_stats, experience_timeline, organizations, media_items,
+    profile, site_settings
+TO anon, authenticated;
+GRANT INSERT ON contact_submissions TO anon, authenticated;
+GRANT ALL ON admin_secrets TO service_role;
 
 -- ============================================
 -- SEED DATA

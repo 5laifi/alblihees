@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
 import { Resend } from "resend";
+import crypto from "crypto";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const NOTIFY_EMAIL = process.env.ADMIN_EMAIL || "Tharii@me.com";
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const supabase = createServerSupabaseClient();
+        const supabase = createAdminSupabaseClient();
         const body = await request.json();
 
         const { name, email, phone, message } = body;
@@ -85,15 +86,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
         }
 
-        // Save to database
-        const { data, error } = await supabase
+        // Save to database. The id is generated here so the insert does not need to
+        // read the row back (submissions are not publicly readable).
+        const id = crypto.randomUUID();
+        const { error } = await supabase
             .from("contact_submissions")
-            .insert({ name: name.trim(), email: email.trim(), phone: (phone || "").trim(), message: message.trim() })
-            .select()
-            .single();
+            .insert({ id, name: name.trim(), email: email.trim(), phone: (phone || "").trim(), message: message.trim() });
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error("Contact save error:", error);
+            return NextResponse.json({ error: "Could not save your message. Please try again." }, { status: 500 });
         }
 
         // Send email notification
@@ -130,8 +132,9 @@ export async function POST(request: Request) {
             }
         }
 
-        return NextResponse.json({ success: true, id: data.id }, { status: 201 });
-    } catch {
+        return NextResponse.json({ success: true, id }, { status: 201 });
+    } catch (e) {
+        console.error("Contact error:", e);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

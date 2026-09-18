@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createAdminSupabaseClient } from "@/lib/supabase";
 import { verifyAdmin, unauthorizedResponse } from "@/lib/auth";
+import { isAdminSecretKey } from "@/lib/admin-secrets";
 import { revalidatePath } from "next/cache";
 
 export async function GET() {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const { data, error } = await supabase
         .from("site_settings")
         .select("*");
@@ -16,6 +17,9 @@ export async function GET() {
     // Convert array to key-value object
     const settings: Record<string, string> = {};
     data?.forEach((row: { key: string; value: string }) => {
+        // Credentials belong in admin_secrets; never send them to the browser
+        // even if a legacy row is still present in site_settings.
+        if (isAdminSecretKey(row.key)) return;
         settings[row.key] = row.value;
     });
 
@@ -25,11 +29,16 @@ export async function GET() {
 export async function PUT(request: Request) {
     if (!(await verifyAdmin())) return unauthorizedResponse();
 
-    const supabase = createServerSupabaseClient();
+    const supabase = createAdminSupabaseClient();
     const body = await request.json();
     const { key, value } = body;
 
-    if (!key) return NextResponse.json({ error: "Key is required" }, { status: 400 });
+    if (!key || typeof key !== "string") return NextResponse.json({ error: "Key is required" }, { status: 400 });
+
+    // Credentials are managed only through the auth routes and the admin_secrets table
+    if (isAdminSecretKey(key)) {
+        return NextResponse.json({ error: "This key cannot be changed from settings" }, { status: 400 });
+    }
 
     // Try update first, if no rows affected then insert
     const { data: existing } = await supabase
