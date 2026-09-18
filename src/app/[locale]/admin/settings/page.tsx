@@ -168,7 +168,7 @@ export default function AdminSettingsPage() {
                             <Input
                                 value={settings.hero_video_url || ""}
                                 onChange={(e) => setSettings(prev => ({ ...prev, hero_video_url: e.target.value }))}
-                                placeholder="/hero-bg.mp4"
+                                placeholder="/videos/your-video.mp4"
                             />
                             <Button
                                 variant="outline"

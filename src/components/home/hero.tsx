@@ -42,27 +42,32 @@ export function Hero({ locale, profile, heroVideoUrl }: { locale: string; profil
     return (
         <SectionWrapper className="relative lg:min-h-[80vh] lg:flex lg:items-center lg:justify-center overflow-hidden bg-background pb-0 md:pb-20">
 
-            {/* Background Video */}
-            <div
-                className="absolute inset-0 z-0 pointer-events-none"
-                style={{
-                    maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                }}
-            >
-                <video
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    preload="none"
-                    className="absolute inset-0 w-full h-full object-cover opacity-50"
+            {/* Background Video: only the one chosen in admin settings. There is no
+                built-in fallback clip; without a setting the hero shows the plain
+                themed background. */}
+            {heroVideoUrl ? (
+                <div
+                    className="absolute inset-0 z-0 pointer-events-none"
+                    style={{
+                        maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                    }}
                 >
-                    <source src={heroVideoUrl || "/hero-bg.mp4"} type="video/mp4" />
-                </video>
-                {/* Overlay for text readability */}
-                <div className="absolute inset-0 bg-background/60" />
-            </div>
+                    <video
+                        key={heroVideoUrl}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        preload="none"
+                        className="absolute inset-0 w-full h-full object-cover opacity-50"
+                    >
+                        <source src={heroVideoUrl} type="video/mp4" />
+                    </video>
+                    {/* Overlay for text readability */}
+                    <div className="absolute inset-0 bg-background/60" />
+                </div>
+            ) : null}
 
             {/* Background Decorative Elements */}
             <div className="absolute inset-0 z-[1] opacity-10 pointer-events-none">

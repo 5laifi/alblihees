@@ -5,6 +5,8 @@ import crypto from "crypto";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const NOTIFY_EMAIL = process.env.ADMIN_EMAIL || "Tharii@me.com";
+// Must be an address on a domain verified in Resend
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "noreply@alblaihees.com";
 
 // Simple in-memory rate limiter
 const contactAttempts = new Map<string, { count: number; lastAttempt: number }>();
@@ -106,9 +108,11 @@ export async function POST(request: Request) {
                 const safePhone = phone ? escapeHtml(phone.trim()) : "";
                 const safeMessage = escapeHtml(message.trim());
 
-                await resend.emails.send({
-                    from: "Dhari Website <onboarding@resend.dev>",
+                // The SDK returns errors instead of throwing
+                const { error: sendError } = await resend.emails.send({
+                    from: `Dhari Website <${FROM_EMAIL}>`,
                     to: NOTIFY_EMAIL,
+                    replyTo: email.trim(),
                     subject: `New Contact: ${safeName}`,
                     html: `
                         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -126,6 +130,9 @@ export async function POST(request: Request) {
                         </div>
                     `,
                 });
+                if (sendError) {
+                    console.error("Email send error:", sendError);
+                }
             } catch (emailError) {
                 console.error("Email send error:", emailError);
                 // Don't fail the request if email fails — data is saved
