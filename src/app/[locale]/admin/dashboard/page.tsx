@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Image as ImageIcon, Users, Activity, Mail, CheckCircle, AlertCircle } from "lucide-react";
+import { FileText, Image as ImageIcon, Users, Activity, Mail, CheckCircle, AlertCircle, ReceiptText, ArrowUpRight } from "lucide-react";
+import { Link } from "@/i18n/routing";
+import { calcTotals, formatDocDate, formatMoney, round3, type SavedInvoice } from "@/lib/invoice-types";
 
 interface DashboardStats {
     services: number;
@@ -12,8 +14,41 @@ interface DashboardStats {
     unreadContacts: number;
 }
 
+interface InvoiceSummary {
+    quotations: number;
+    invoices: number;
+    unpaid: number;
+    /** Outstanding amount per currency, e.g. { KWD: 1200.5 } */
+    outstanding: Record<string, number>;
+    recent: SavedInvoice[];
+}
+
+const PAYMENT_BADGE: Record<SavedInvoice["paymentStatus"], { label: string; className: string }> = {
+    unpaid: { label: "Unpaid", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
+    partial: { label: "Partial", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
+    paid: { label: "Paid", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
+};
+
+function summarize(list: SavedInvoice[]): InvoiceSummary {
+    const invoices = list.filter((doc) => doc.documentType === "invoice");
+    const outstanding: Record<string, number> = {};
+    for (const inv of invoices) {
+        const remaining = round3(calcTotals(inv.items, inv.discount).total - (inv.amountPaid || 0));
+        if (remaining > 0) outstanding[inv.currency] = round3((outstanding[inv.currency] || 0) + remaining);
+    }
+    return {
+        quotations: list.length - invoices.length,
+        invoices: invoices.length,
+        unpaid: invoices.filter((inv) => inv.paymentStatus !== "paid").length,
+        outstanding,
+        recent: list.slice(0, 5),
+    };
+}
+
 export default function AdminDashboardPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [invoiceSummary, setInvoiceSummary] = useState<InvoiceSummary | null>(null);
+    const [invoiceState, setInvoiceState] = useState<"loading" | "ready" | "setup" | "error">("loading");
     const [dbStatus, setDbStatus] = useState<"checking" | "connected" | "error">("checking");
 
     useEffect(() => {
@@ -44,7 +79,29 @@ export default function AdminDashboardPage() {
             }
         }
         fetchStats();
+
+        // Kept separate so a missing invoices setup never marks the whole site as down.
+        async function fetchInvoices() {
+            try {
+                const res = await fetch("/api/admin/invoices");
+                const body = await res.json().catch(() => ({}));
+                if (body.code === "SETUP_REQUIRED") return setInvoiceState("setup");
+                if (!res.ok || !Array.isArray(body.invoices)) return setInvoiceState("error");
+                setInvoiceSummary(summarize(body.invoices));
+                setInvoiceState("ready");
+            } catch {
+                setInvoiceState("error");
+            }
+        }
+        fetchInvoices();
     }, []);
+
+    const outstandingText =
+        invoiceSummary && Object.keys(invoiceSummary.outstanding).length > 0
+            ? Object.entries(invoiceSummary.outstanding)
+                  .map(([currency, amount]) => formatMoney(amount, currency, "latin"))
+                  .join(" + ")
+            : "0";
 
     const statCards = [
         { label: "Services", value: stats?.services ?? "—", icon: FileText, color: "text-blue-500" },
@@ -78,6 +135,87 @@ export default function AdminDashboardPage() {
                     </Card>
                 ))}
             </div>
+
+            {/* ---------- Invoices & quotations ---------- */}
+            <Card className="border-t-4 border-t-[#78B7D0]">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                    <CardTitle className="flex items-center gap-2">
+                        <ReceiptText className="h-5 w-5 text-[#78B7D0]" />
+                        Invoices &amp; Quotations
+                    </CardTitle>
+                    <Link href="/admin/invoices" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                        Open <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {invoiceState === "loading" && <p className="text-sm text-muted-foreground">Loading…</p>}
+                    {invoiceState === "setup" && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                            Invoice storage is not configured yet. Run supabase-invoices.sql and set SUPABASE_SERVICE_ROLE_KEY.
+                        </p>
+                    )}
+                    {invoiceState === "error" && <p className="text-sm text-red-500">Could not load invoices.</p>}
+
+                    {invoiceState === "ready" && invoiceSummary && (
+                        <>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                {[
+                                    { label: "Quotations", value: String(invoiceSummary.quotations) },
+                                    { label: "Invoices", value: String(invoiceSummary.invoices) },
+                                    { label: "Awaiting payment", value: String(invoiceSummary.unpaid), warn: invoiceSummary.unpaid > 0 },
+                                    { label: "Outstanding", value: outstandingText, warn: outstandingText !== "0" },
+                                ].map((item) => (
+                                    <div key={item.label} className="rounded-lg border p-4">
+                                        <p className="text-xs text-muted-foreground">{item.label}</p>
+                                        <p className={`mt-1 text-xl font-bold ${item.warn ? "text-orange-500" : ""}`}>
+                                            <bdi>{item.value}</bdi>
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {invoiceSummary.recent.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    No documents yet.{" "}
+                                    <Link href="/admin/invoices" className="font-medium text-primary hover:underline">
+                                        Create the first one
+                                    </Link>
+                                    .
+                                </p>
+                            ) : (
+                                <div>
+                                    <p className="mb-2 text-sm font-medium">Latest documents</p>
+                                    <ul className="divide-y rounded-lg border">
+                                        {invoiceSummary.recent.map((doc) => (
+                                            <li key={doc.id}>
+                                                <Link href="/admin/invoices" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 text-sm hover:bg-muted/60">
+                                                    <span className="flex min-w-0 items-center gap-3">
+                                                        <span className="font-semibold whitespace-nowrap">
+                                                            {doc.documentType === "invoice" ? "Invoice" : "Quotation"} #{doc.docNumber}
+                                                        </span>
+                                                        <bdi className="truncate text-muted-foreground">{doc.clientName}</bdi>
+                                                    </span>
+                                                    <span className="flex items-center gap-3 whitespace-nowrap">
+                                                        {doc.documentType === "invoice" && (
+                                                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PAYMENT_BADGE[doc.paymentStatus].className}`}>
+                                                                {PAYMENT_BADGE[doc.paymentStatus].label}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-muted-foreground" dir="ltr">
+                                                            {formatDocDate(doc.issueDate)}
+                                                        </span>
+                                                        <bdi className="font-bold">{formatMoney(calcTotals(doc.items, doc.discount).total, doc.currency, "latin")}</bdi>
+                                                    </span>
+                                                </Link>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </CardContent>
+            </Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card>

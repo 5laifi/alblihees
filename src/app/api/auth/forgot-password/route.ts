@@ -64,7 +64,7 @@ export async function POST(request: Request) {
         await saveOrUpdateSetting(supabase, "password_reset_expires", expiresAt);
 
         // Use SITE_URL env var instead of trusting the Host header
-        const siteUrl = process.env.SITE_URL || "https://tharialblaihees.com";
+        const siteUrl = process.env.SITE_URL || "https://www.alblaihees.com";
         const resetUrl = `${siteUrl}/en/admin/reset-password?token=${resetToken}`;
 
         // Send email (the SDK returns errors instead of throwing)

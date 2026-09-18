@@ -14,7 +14,8 @@ import {
     Menu,
     Mail,
     Loader2,
-    ShieldAlert
+    ShieldAlert,
+    ReceiptText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -29,6 +30,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     // If on login page, don't check auth
     const isLoginPage = pathname.includes("/admin/login");
+    // Print view of an invoice: still auth-gated, but rendered without the admin chrome
+    const isPrintPage = pathname.includes("/admin/invoices/print/");
 
     useEffect(() => {
         if (isLoginPage) {
@@ -63,6 +66,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: "/admin/partners", label: "Partners", icon: Users },
         { href: "/admin/experience", label: "Experience", icon: Briefcase },
         { href: "/admin/contacts", label: "Contact Messages", icon: Mail },
+        { href: "/admin/invoices", label: "Invoices & Quotes", icon: ReceiptText },
         { href: "/admin/settings", label: "Settings", icon: Settings },
     ];
 
@@ -150,6 +154,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </div>
             </div>
         );
+    }
+
+    if (isPrintPage) {
+        return <>{children}</>;
     }
 
     return (
