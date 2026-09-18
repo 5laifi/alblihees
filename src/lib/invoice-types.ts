@@ -200,3 +200,102 @@ export function docFileName(inv: Pick<InvoiceData, "documentType" | "docNumber" 
     const safeClient = (inv.clientName || "").replace(/[\\/:*?"<>|]+/g, " ").trim();
     return `${DOC_LABELS[inv.documentType]} ${inv.docNumber}${safeClient ? ` - ${safeClient}` : ""}.pdf`;
 }
+
+// ---------- Admin console helpers (English UI) ----------
+// The printed document stays Arabic (DOC_LABELS, STATUS_LABELS above). The
+// admin screens around it are English, like the rest of the console.
+
+export const DOC_LABELS_EN: Record<DocumentType, string> = {
+    invoice: "Invoice",
+    quotation: "Quotation",
+};
+
+export const DOC_LABELS_EN_PLURAL: Record<DocumentType, string> = {
+    invoice: "Invoices",
+    quotation: "Quotations",
+};
+
+export const PAYMENT_STATUS_META: Record<PaymentStatus, { label: string; tone: "red" | "amber" | "green" }> = {
+    unpaid: { label: "Unpaid", tone: "red" },
+    partial: { label: "Partially paid", tone: "amber" },
+    paid: { label: "Paid", tone: "green" },
+};
+
+export const TEMPLATE_LABELS_EN: Record<InvoiceTemplate, { label: string; hint: string }> = {
+    stage: { label: "Stage", hint: "Dark stage photo header" },
+    portrait: { label: "Portrait", hint: "Blue header with the portrait" },
+    navy: { label: "Site identity", hint: "The website's navy colors" },
+};
+
+export const CURRENCY_LABELS_EN: Record<string, string> = {
+    KWD: "Kuwaiti Dinar",
+    SAR: "Saudi Riyal",
+    AED: "UAE Dirham",
+    QAR: "Qatari Riyal",
+    BHD: "Bahraini Dinar",
+    OMR: "Omani Rial",
+    USD: "US Dollar",
+};
+
+export function currencyLabelEn(code: string): string {
+    return CURRENCY_LABELS_EN[code] ?? code;
+}
+
+/** "KWD 1,215.5" — code first, Latin digits, up to 3 decimals. For admin lists and tiles. */
+export function formatAmount(value: number, currency: string): string {
+    return `${currency} ${formatNumber(value, "latin")}`;
+}
+
+/** Per-currency amounts joined, primary currency first: "KWD 715 · USD 500". */
+export function formatAmountMap(map: Record<string, number>, empty = "KWD 0", primary = "KWD"): string {
+    const entries = Object.entries(map).filter(([, amount]) => Number.isFinite(amount));
+    if (entries.length === 0) return empty;
+    entries.sort(([a], [b]) => (a === primary ? -1 : b === primary ? 1 : a.localeCompare(b)));
+    return entries.map(([code, amount]) => formatAmount(amount, code)).join(" · ");
+}
+
+/** "18 Sep 2026" from YYYY-MM-DD; falls back to the raw value. */
+export function formatDateEn(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+    if (!m) return iso || "—";
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    });
+}
+
+/** What is still owed on an invoice (never negative). */
+export function remainingAmount(inv: Pick<SavedInvoice, "items" | "discount" | "amountPaid">): number {
+    return Math.max(0, round3(calcTotals(inv.items, inv.discount).total - (inv.amountPaid || 0)));
+}
+
+export interface DocumentSummary {
+    quotations: number;
+    invoices: number;
+    unpaid: number;
+    partial: number;
+    paid: number;
+    /** Outstanding amount per currency, e.g. { KWD: 1200.5 } */
+    outstanding: Record<string, number>;
+    /** Newest documents first (the list is already sorted by the server) */
+    recent: SavedInvoice[];
+}
+
+export function summarizeDocuments(list: SavedInvoice[], recentCount = 5): DocumentSummary {
+    const invoices = list.filter((doc) => doc.documentType === "invoice");
+    const outstanding: Record<string, number> = {};
+    for (const inv of invoices) {
+        const remaining = remainingAmount(inv);
+        if (remaining > 0) outstanding[inv.currency] = round3((outstanding[inv.currency] || 0) + remaining);
+    }
+    return {
+        quotations: list.length - invoices.length,
+        invoices: invoices.length,
+        unpaid: invoices.filter((inv) => inv.paymentStatus === "unpaid").length,
+        partial: invoices.filter((inv) => inv.paymentStatus === "partial").length,
+        paid: invoices.filter((inv) => inv.paymentStatus === "paid").length,
+        outstanding,
+        recent: list.slice(0, recentCount),
+    };
+}
