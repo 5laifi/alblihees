@@ -20,6 +20,7 @@ import {
     Award,
     ChevronDown,
     ChevronRight,
+    ReceiptText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -61,6 +62,10 @@ const NAV_GROUPS: NavGroup[] = [
             { href: "/admin/partners", label: "Partners", icon: Users },
             { href: "/admin/experience", label: "Experience", icon: Award },
         ],
+    },
+    {
+        title: "Finance",
+        items: [{ href: "/admin/invoices", label: "Invoices & Quotes", icon: ReceiptText }],
     },
     {
         title: "Inbox",
@@ -191,6 +196,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     // Login and reset-password pages are reachable without a session.
     const isPublicAdminPage = pathname.includes("/admin/login") || pathname.includes("/admin/reset-password");
+    // Print view of an invoice: still auth-gated, but rendered without the admin chrome
+    const isPrintPage = pathname.includes("/admin/invoices/print/");
 
     useEffect(() => {
         // Public pages render before authState is consulted, so no check is needed.
@@ -276,6 +283,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </div>
             </div>
         );
+    }
+
+    // Reached only when authenticated (the two checks above return first)
+    if (isPrintPage) {
+        return <>{children}</>;
     }
 
     return (
