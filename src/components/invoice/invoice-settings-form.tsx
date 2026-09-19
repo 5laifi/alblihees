@@ -11,14 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import {
-    TEMPLATES,
-    TEMPLATE_LABELS_EN,
-    emptyInvoice,
-    type InvoiceSettings,
-    type InvoiceTemplate,
-    type Numerals,
-} from "@/lib/invoice-types";
+import { TEMPLATES, emptyInvoice, type InvoiceSettings, type InvoiceTemplate, type Numerals } from "@/lib/invoice-types";
 import { InvoiceDocument } from "./invoice-document";
 import { ScaledPreview } from "./scaled-preview";
 
@@ -27,8 +20,7 @@ interface Props {
     onSaved: (settings: InvoiceSettings) => void;
 }
 
-// The sample stays Arabic on purpose: the printed document is always Arabic,
-// only the admin chrome around it is English.
+// Sample data for the live preview beside the form.
 const SAMPLE = emptyInvoice({
     documentType: "invoice", // so the preview shows the payment details block
     docNumber: 100,
@@ -60,30 +52,32 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.settings) {
-                toast.error("Could not save the settings, check the fields.");
+                toast.error("تعذر حفظ الإعدادات، تحقق من الحقول");
                 return;
             }
-            toast.success("Settings saved");
+            toast.success("تم حفظ الإعدادات");
             onSaved(body.settings as InvoiceSettings);
         } catch {
-            toast.error("Could not reach the server.");
+            toast.error("تعذر الاتصال بالخادم");
         } finally {
             setSaving(false);
         }
     }
 
-    // Free-text fields may hold Arabic, so they get dir="auto"; codes, URLs
-    // and numbers stay in the console's own direction.
+    // Codes, URLs and numbers are Latin-only, so they get dir="ltr" and sit
+    // flush with the labels (text-end); free-text fields may hold Arabic or
+    // English, so they get dir="auto".
     const text = (
         key: keyof InvoiceSettings,
         label: string,
-        options: { auto?: boolean; placeholder?: string; className?: string } = {}
+        options: { dir?: "ltr" | "auto"; placeholder?: string; className?: string } = {}
     ) => (
         <div className={cn("space-y-2", options.className)}>
             <Label htmlFor={`set-${key}`}>{label}</Label>
             <Input
                 id={`set-${key}`}
-                dir={options.auto ? "auto" : undefined}
+                dir={options.dir}
+                className={options.dir === "ltr" ? "text-end" : undefined}
                 placeholder={options.placeholder}
                 value={String(form[key] ?? "")}
                 onChange={(e) => set(key, e.target.value as never)}
@@ -94,33 +88,35 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
     return (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
             <div className="min-w-0 space-y-6">
-                <SectionCard title="Contact details" description="Shown at the bottom of every document." contentClassName={FIELD_GRID}>
-                    {text("phone", "Phone", { placeholder: "+965…" })}
-                    {text("email", "Email")}
-                    {text("website", "Website")}
-                    {text("businessNameEn", "English name (watermark)")}
-                    {text("tagline", "Tagline", { auto: true, className: "sm:col-span-2" })}
+                <SectionCard title="بيانات التواصل" description="تظهر أسفل كل فاتورة وعرض سعر." contentClassName={FIELD_GRID}>
+                    {text("phone", "رقم الهاتف", { dir: "ltr", placeholder: "+965…" })}
+                    {text("email", "البريد الإلكتروني", { dir: "ltr" })}
+                    {text("website", "الموقع الإلكتروني", { dir: "ltr" })}
+                    {text("businessNameEn", "الاسم بالإنجليزية (العلامة المائية)", { dir: "ltr" })}
+                    {text("tagline", "الشعار النصي", { dir: "auto", className: "sm:col-span-2" })}
                 </SectionCard>
 
                 <SectionCard
-                    title="Payment details"
-                    description="Printed on invoices only, never on quotations. An empty field goes back to the built-in value."
+                    title="بيانات الدفع"
+                    description="تُطبع في الفواتير فقط ولا تظهر في عروض الأسعار. الحقل الفارغ يعود إلى القيمة الافتراضية المدمجة."
                     contentClassName={FIELD_GRID}
                 >
                     <div className="flex items-center gap-3 sm:col-span-2">
+                        {/* The switch thumb slides along a physical axis, so it keeps its own LTR direction */}
                         <Switch
                             id="set-showPaymentDetails"
+                            dir="ltr"
                             checked={form.showPaymentDetails}
                             onCheckedChange={(v) => set("showPaymentDetails", v)}
                         />
-                        <Label htmlFor="set-showPaymentDetails">Show payment details on invoices</Label>
+                        <Label htmlFor="set-showPaymentDetails">إظهار بيانات الدفع في الفواتير</Label>
                     </div>
-                    {text("payeeName", "Cheque payee name", { auto: true, className: "sm:col-span-2" })}
-                    {text("iban", "IBAN", { className: "sm:col-span-2" })}
-                    {text("accountNumber", "Account number")}
-                    {text("accountName", "Account name (English)")}
+                    {text("payeeName", "اسم المستفيد في الشيك", { dir: "auto", className: "sm:col-span-2" })}
+                    {text("iban", "IBAN", { dir: "ltr", className: "sm:col-span-2" })}
+                    {text("accountNumber", "رقم الحساب", { dir: "ltr" })}
+                    {text("accountName", "اسم الحساب (بالإنجليزية)", { dir: "ltr" })}
                     <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="set-invoiceTerms">Payment text on invoices</Label>
+                        <Label htmlFor="set-invoiceTerms">نص الدفع في الفواتير</Label>
                         <Textarea
                             id="set-invoiceTerms"
                             rows={2}
@@ -131,21 +127,21 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
                     </div>
                 </SectionCard>
 
-                <SectionCard title="Liaison officer & signature" contentClassName={FIELD_GRID}>
-                    {text("liaisonTitle", "Title", { auto: true })}
-                    {text("liaisonName", "Name", { auto: true })}
-                    {text("liaisonPhone", "Phone")}
-                    {text("signatureUrl", "Signature image URL")}
+                <SectionCard title="ضابط الاتصال والتوقيع" contentClassName={FIELD_GRID}>
+                    {text("liaisonTitle", "المسمى", { dir: "auto" })}
+                    {text("liaisonName", "الاسم", { dir: "auto" })}
+                    {text("liaisonPhone", "الهاتف", { dir: "ltr" })}
+                    {text("signatureUrl", "رابط صورة التوقيع", { dir: "ltr" })}
                     <div className="flex items-center gap-3 sm:col-span-2">
-                        <Switch id="set-showSignature" checked={form.showSignature} onCheckedChange={(v) => set("showSignature", v)} />
-                        <Label htmlFor="set-showSignature">Show signature on documents</Label>
+                        <Switch id="set-showSignature" dir="ltr" checked={form.showSignature} onCheckedChange={(v) => set("showSignature", v)} />
+                        <Label htmlFor="set-showSignature">إظهار التوقيع في المستندات</Label>
                     </div>
                 </SectionCard>
 
-                <SectionCard title="Document options" contentClassName={FIELD_GRID}>
-                    {text("qrUrl", "QR code link (leave empty to hide)", { className: "sm:col-span-2" })}
+                <SectionCard title="خيارات المستند" contentClassName={FIELD_GRID}>
+                    {text("qrUrl", "رابط رمز QR (اتركه فارغاً لإخفائه)", { dir: "ltr", className: "sm:col-span-2" })}
                     <div className="space-y-2">
-                        <Label htmlFor="set-defaultTemplate">Default template</Label>
+                        <Label htmlFor="set-defaultTemplate">القالب الافتراضي</Label>
                         <Select value={form.defaultTemplate} onValueChange={(v) => set("defaultTemplate", v as InvoiceTemplate)}>
                             <SelectTrigger id="set-defaultTemplate">
                                 <SelectValue />
@@ -153,35 +149,37 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
                             <SelectContent>
                                 {TEMPLATES.map((t) => (
                                     <SelectItem key={t.key} value={t.key}>
-                                        {TEMPLATE_LABELS_EN[t.key].label}
+                                        {t.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="set-numerals">Numerals on amounts</Label>
+                        <Label htmlFor="set-numerals">شكل الأرقام في المبالغ</Label>
                         <Select value={form.numerals} onValueChange={(v) => set("numerals", v as Numerals)}>
                             <SelectTrigger id="set-numerals">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="arabic">Arabic numerals (٥٠٠)</SelectItem>
-                                <SelectItem value="latin">Latin numerals (500)</SelectItem>
+                                <SelectItem value="arabic">أرقام عربية (٥٠٠)</SelectItem>
+                                <SelectItem value="latin">أرقام إنجليزية (500)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="set-startNumber">Numbering starts at</Label>
+                        <Label htmlFor="set-startNumber">بداية الترقيم التلقائي</Label>
                         <Input
                             id="set-startNumber"
                             type="number"
                             min={1}
+                            dir="ltr"
+                            className="text-end"
                             value={form.startNumber || ""}
                             onChange={(e) => set("startNumber", Math.max(1, Math.floor(Number(e.target.value)) || 1))}
                         />
                         <p className="text-xs text-muted-foreground">
-                            The next number is the larger of this value and the last saved number + 1. Numbers cannot be typed on the document.
+                            الرقم التالي هو الأكبر بين هذه القيمة وآخر رقم محفوظ مضافاً إليه واحد. لا يمكن كتابة الرقم يدوياً داخل المستند.
                         </p>
                     </div>
                 </SectionCard>
@@ -189,13 +187,13 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
                 <div className="flex justify-end">
                     <Button onClick={save} disabled={saving} className="gap-2">
                         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        Save settings
+                        حفظ الإعدادات
                     </Button>
                 </div>
             </div>
 
             <div className="min-w-0 lg:sticky lg:top-4">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Preview with current settings</p>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">معاينة بالبيانات الحالية</p>
                 <div className="rounded-xl border bg-muted/30 p-3 sm:p-5">
                     <ScaledPreview>
                         <InvoiceDocument data={{ ...SAMPLE, template: form.defaultTemplate }} settings={form} />

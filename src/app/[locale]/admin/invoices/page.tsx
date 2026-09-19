@@ -23,7 +23,9 @@ import { InvoiceSettingsForm } from "@/components/invoice/invoice-settings-form"
 import { InvoiceWizard } from "@/components/invoice/invoice-wizard";
 import {
     DEFAULT_INVOICE_SETTINGS,
-    formatAmountMap,
+    DOC_LABELS_PLURAL,
+    PAYMENT_STATUS_META_AR,
+    formatMoney,
     summarizeDocuments,
     type InvoiceSettings,
     type SavedInvoice,
@@ -33,8 +35,16 @@ type TabKey = "create" | "invoices" | "quotations" | "settings";
 
 const CODE_CLASS = "rounded bg-muted px-1 py-0.5 text-xs";
 
-function plural(count: number, noun: string) {
-    return `${count} ${noun}${count === 1 ? "" : "s"}`;
+// Arabic count phrase with Latin digits, following the CLDR plural forms for
+// Arabic: one, two, few (3-10), many (11-99) and other. The dual keeps the
+// accusative form ("مستندين") because every caller places it after a verb.
+function countDocuments(count: number): string {
+    if (count === 1) return "مستند واحد";
+    if (count === 2) return "مستندين";
+    const rest = count % 100;
+    if (rest >= 3 && rest <= 10) return `${count} مستندات`;
+    if (rest >= 11) return `${count} مستنداً`;
+    return `${count} مستند`;
 }
 
 export default function AdminInvoicesPage() {
@@ -78,7 +88,7 @@ export default function AdminInvoicesPage() {
                 setLocalPreview(null);
             }
         } catch {
-            toast.error("Could not load invoices.");
+            toast.error("تعذر تحميل البيانات");
         } finally {
             setLoading(false);
         }
@@ -98,19 +108,19 @@ export default function AdminInvoicesPage() {
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.result) {
-                toast.error("Could not move the preview data.");
+                toast.error("تعذر نقل بيانات المعاينة");
                 return;
             }
             const { settings: movedSettings, imported, skipped } = body.result;
-            const parts = [movedSettings ? "Settings moved" : "Settings were already in the database"];
+            const parts = [movedSettings ? "تم نقل الإعدادات" : "الإعدادات موجودة مسبقاً في قاعدة البيانات"];
             if (documents) {
-                parts.push(`${plural(imported, "document")} moved`);
-                if (skipped) parts.push(`${plural(skipped, "duplicate")} skipped`);
+                parts.push(imported > 0 ? `تم نقل ${countDocuments(imported)}` : "لم يُنقل أي مستند");
+                if (skipped) parts.push(`تم تخطي ${countDocuments(skipped)} بسبب التكرار`);
             }
             toast.success(parts.join(" · "));
             await load();
         } catch {
-            toast.error("Could not reach the server.");
+            toast.error("تعذر الاتصال بالخادم");
         } finally {
             setImporting(false);
         }
@@ -126,46 +136,54 @@ export default function AdminInvoicesPage() {
     const awaiting = summary.unpaid + summary.partial;
     const hasOutstanding = Object.values(summary.outstanding).some((amount) => amount > 0);
 
+    // Outstanding amount per currency, KWD first, Latin digits: "1,215.5 د.ك + 500 $".
+    const outstandingEntries = Object.entries(summary.outstanding).filter(([, amount]) => Number.isFinite(amount));
+    outstandingEntries.sort(([a], [b]) => (a === "KWD" ? -1 : b === "KWD" ? 1 : a.localeCompare(b)));
+    const outstandingText =
+        outstandingEntries.length > 0
+            ? outstandingEntries.map(([code, amount]) => formatMoney(amount, code, "latin")).join(" + ")
+            : formatMoney(0, "KWD", "latin");
+
     const previewParts: string[] = [];
-    if (localPreview?.hasSettings) previewParts.push("Settings");
-    if (localPreview && localPreview.documents > 0) previewParts.push(plural(localPreview.documents, "document"));
+    if (localPreview?.hasSettings) previewParts.push("الإعدادات");
+    if (localPreview && localPreview.documents > 0) previewParts.push(countDocuments(localPreview.documents));
 
     return (
-        <div className="space-y-6">
+        <div dir="rtl" lang="ar" className="space-y-6">
             <PageHeader
-                title="Invoices & Quotations"
-                description="Create branded quotations and invoices, track payments and export PDFs."
+                title="الفواتير وعروض الأسعار"
+                description="أنشئ مستنداتك بهوية ضاري البليهيس واحفظها وتابع حالة الدفع."
                 actions={
                     <>
                         {storage === "supabase" && (
                             <StatusPill tone="green">
-                                <Database className="h-3 w-3" /> Connected to database
+                                <Database className="h-3 w-3" /> متصل بقاعدة البيانات
                             </StatusPill>
                         )}
                         {storage === "local" && (
                             <StatusPill tone="amber">
-                                <HardDrive className="h-3 w-3" /> Preview mode · saved on this device
+                                <HardDrive className="h-3 w-3" /> وضع المعاينة: الحفظ على هذا الجهاز فقط
                             </StatusPill>
                         )}
                         <Button onClick={startNew} className="gap-2">
-                            <FilePlus2 className="h-4 w-4" /> New document
+                            <FilePlus2 className="h-4 w-4" /> مستند جديد
                         </Button>
                     </>
                 }
             />
 
             {setupRequired && (
-                <InlineNotice tone="red" icon={AlertCircle} title="Database not set up yet">
-                    Run <code className={CODE_CLASS}>supabase-invoices.sql</code> in the Supabase SQL editor, then add{" "}
-                    <code className={CODE_CLASS}>SUPABASE_SERVICE_ROLE_KEY</code> to the environment variables and redeploy.
+                <InlineNotice tone="red" icon={AlertCircle} title="قاعدة البيانات غير مهيأة بعد">
+                    شغّل ملف <code dir="ltr" className={CODE_CLASS}>supabase-invoices.sql</code> في محرر SQL داخل Supabase، ثم أضف المفتاح{" "}
+                    <code dir="ltr" className={CODE_CLASS}>SUPABASE_SERVICE_ROLE_KEY</code> إلى متغيرات البيئة وأعد النشر.
                 </InlineNotice>
             )}
 
             {storage === "local" && (
-                <InlineNotice tone="amber" icon={HardDrive} title="Preview mode">
-                    <code className={CODE_CLASS}>SUPABASE_SERVICE_ROLE_KEY</code> is not set, so documents are saved to a file on this machine. Add the
-                    key to <code className={CODE_CLASS}>.env.local</code> and to the Vercel environment variables, restart the server, and saving
-                    switches to the database automatically.
+                <InlineNotice tone="amber" icon={HardDrive} title="وضع المعاينة">
+                    لم يتم ضبط المفتاح <code dir="ltr" className={CODE_CLASS}>SUPABASE_SERVICE_ROLE_KEY</code> بعد، فيتم الحفظ في ملف على هذا الجهاز.
+                    أضف المفتاح إلى ملف <code dir="ltr" className={CODE_CLASS}>.env.local</code> وإلى متغيرات Vercel ثم أعد تشغيل الخادم، وسيتحول
+                    الحفظ تلقائياً إلى قاعدة البيانات.
                 </InlineNotice>
             )}
 
@@ -173,22 +191,24 @@ export default function AdminInvoicesPage() {
                 <InlineNotice
                     tone="sky"
                     icon={UploadCloud}
-                    title="Preview data ready to move to the database"
+                    title="بيانات المعاينة جاهزة للنقل إلى قاعدة البيانات"
                     action={
                         <>
                             <Button size="sm" onClick={() => importPreview(false)} disabled={importing} className="gap-2">
                                 {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                                Move settings
+                                نقل الإعدادات فقط
                             </Button>
                             {localPreview.documents > 0 && (
                                 <Button size="sm" variant="outline" onClick={() => importPreview(true)} disabled={importing}>
-                                    Move settings and documents
+                                    نقل الإعدادات والمستندات
                                 </Button>
                             )}
                         </>
                     }
                 >
-                    {previewParts.length > 0 ? `${previewParts.join(" and ")} from the local preview file can be moved to the database.` : "The local preview file can be moved to the database."}
+                    {previewParts.length > 0
+                        ? `يمكن نقل ${previewParts.join(" و")} من ملف المعاينة المحلي إلى قاعدة البيانات.`
+                        : "يمكن نقل ملف المعاينة المحلي إلى قاعدة البيانات."}
                 </InlineNotice>
             )}
 
@@ -207,56 +227,56 @@ export default function AdminInvoicesPage() {
                     <>
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                             <StatTile
-                                label="Quotations"
+                                label={DOC_LABELS_PLURAL.quotation}
                                 value={summary.quotations}
                                 icon={FileText}
                                 iconClassName="bg-sky-500/10 text-sky-600 dark:text-sky-400"
                             />
                             <StatTile
-                                label="Invoices"
+                                label={DOC_LABELS_PLURAL.invoice}
                                 value={summary.invoices}
                                 icon={ReceiptText}
                                 iconClassName="bg-violet-500/10 text-violet-600 dark:text-violet-400"
                             />
                             <StatTile
-                                label="Awaiting payment"
+                                label="بانتظار الدفع"
                                 value={awaiting}
                                 icon={Clock}
                                 iconClassName="bg-amber-500/10 text-amber-600 dark:text-amber-400"
                                 warn={awaiting > 0}
                                 hint={
                                     summary.partial > 0
-                                        ? `${summary.partial} partially paid`
+                                        ? `${summary.partial} ${PAYMENT_STATUS_META_AR.partial.label}`
                                         : summary.unpaid > 0
-                                          ? `${summary.unpaid} unpaid`
+                                          ? `${summary.unpaid} ${PAYMENT_STATUS_META_AR.unpaid.label}`
                                           : summary.invoices > 0
-                                            ? "All invoices settled"
+                                            ? "جميع الفواتير مسددة"
                                             : undefined
                                 }
                             />
                             <StatTile
-                                label="Outstanding"
-                                value={formatAmountMap(summary.outstanding)}
-                                valueClassName={Object.keys(summary.outstanding).length > 1 ? "text-base" : undefined}
+                                label="المبالغ المستحقة"
+                                value={outstandingText}
+                                valueClassName={outstandingEntries.length > 1 ? "text-base" : undefined}
                                 icon={Banknote}
                                 iconClassName="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                                 warn={hasOutstanding}
-                                hint="Still owed on invoices"
+                                hint="المتبقي على الفواتير دون سداد"
                             />
                         </div>
 
                         <SegmentedTabs<TabKey>
-                            aria-label="Invoice sections"
+                            aria-label="أقسام الفواتير"
                             value={tab}
                             onChange={(key) => {
                                 setTab(key);
                                 if (key !== "create") setEditing(null);
                             }}
                             options={[
-                                { value: "create", label: editing ? "Edit document" : "New document", icon: FilePlus2 },
-                                { value: "quotations", label: "Quotations", icon: FileText, count: count("quotation") },
-                                { value: "invoices", label: "Invoices", icon: ReceiptText, count: count("invoice") },
-                                { value: "settings", label: "Settings", icon: Settings2 },
+                                { value: "create", label: editing ? "تعديل المستند" : "إنشاء جديد", icon: FilePlus2 },
+                                { value: "quotations", label: DOC_LABELS_PLURAL.quotation, icon: FileText, count: count("quotation") },
+                                { value: "invoices", label: DOC_LABELS_PLURAL.invoice, icon: ReceiptText, count: count("invoice") },
+                                { value: "settings", label: "الإعدادات", icon: Settings2 },
                             ]}
                         />
 

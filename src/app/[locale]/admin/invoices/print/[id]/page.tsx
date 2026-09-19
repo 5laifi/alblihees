@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
 import { ScaledPreview } from "@/components/invoice/scaled-preview";
 import { exportNodeToPdf } from "@/lib/invoice-export";
-import { DEFAULT_INVOICE_SETTINGS, DOC_LABELS_EN, docFileName, type InvoiceSettings, type SavedInvoice } from "@/lib/invoice-types";
+import { DEFAULT_INVOICE_SETTINGS, DOC_LABELS, docFileName, type InvoiceSettings, type SavedInvoice } from "@/lib/invoice-types";
 
 // Print CSS: everything except the document is hidden, the preview scaling is
 // switched off, and the document prints edge to edge with backgrounds kept.
@@ -77,7 +77,7 @@ export default function InvoicePrintPage() {
             await exportNodeToPdf(docRef.current, docFileName(invoice));
         } catch (error) {
             console.error("PDF export failed:", error);
-            toast.error("Could not create the PDF. Try the Print button instead.");
+            toast.error("تعذر إنشاء ملف PDF، جرّب زر الطباعة");
         } finally {
             setExporting(false);
         }
@@ -85,7 +85,7 @@ export default function InvoicePrintPage() {
 
     if (state === "loading") {
         return (
-            <div className="flex min-h-screen items-center justify-center">
+            <div dir="rtl" className="flex min-h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         );
@@ -93,31 +93,31 @@ export default function InvoicePrintPage() {
 
     if (state === "error") {
         return (
-            <div className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-muted-foreground">
-                The document could not be loaded. Refresh the page or sign in again.
+            <div dir="rtl" lang="ar" className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-muted-foreground">
+                تعذر تحميل المستند. حدّث الصفحة أو سجّل الدخول من جديد.
             </div>
         );
     }
 
     if (state === "missing" || !invoice) {
         return (
-            <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-                <p className="text-sm text-muted-foreground">Document not found.</p>
+            <div dir="rtl" lang="ar" className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+                <p className="text-sm text-muted-foreground">لم يتم العثور على المستند.</p>
                 <Button asChild variant="outline">
-                    <Link href="/admin/invoices">Back to invoices</Link>
+                    <Link href="/admin/invoices">العودة إلى الفواتير</Link>
                 </Button>
             </div>
         );
     }
 
     return (
-        <div dir="ltr" className="invoice-print-area min-h-screen bg-slate-200 dark:bg-[#010d18]">
+        <div dir="rtl" lang="ar" className="invoice-print-area min-h-screen bg-slate-200 dark:bg-[#010d18]">
             <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
 
             <div className="invoice-no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-[#021526] px-4 py-3 text-white shadow-lg">
                 <div className="flex min-w-0 items-center gap-2 text-sm">
                     <span className="font-semibold">
-                        {DOC_LABELS_EN[invoice.documentType]} #{invoice.docNumber}
+                        {DOC_LABELS[invoice.documentType]} <span dir="ltr">#{invoice.docNumber}</span>
                     </span>
                     {invoice.clientName && (
                         <>
@@ -129,13 +129,13 @@ export default function InvoicePrintPage() {
                 <div className="flex flex-wrap gap-2">
                     <Button onClick={download} disabled={exporting} className="gap-2 bg-[#78B7D0] text-[#021526] hover:bg-[#9ccbe0]">
                         {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        Download PDF
+                        تحميل PDF
                     </Button>
                     <Button onClick={() => window.print()} variant="outline" className="gap-2 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
-                        <Printer className="h-4 w-4" /> Print
+                        <Printer className="h-4 w-4" /> طباعة
                     </Button>
                     <Button onClick={() => window.close()} variant="ghost" className="gap-2 text-white hover:bg-white/10 hover:text-white">
-                        <X className="h-4 w-4" /> Close
+                        <X className="h-4 w-4" /> إغلاق
                     </Button>
                 </div>
             </div>
