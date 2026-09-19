@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { calcTotals, formatAmount, round3, type SavedInvoice } from "@/lib/invoice-types";
+import { calcTotals, formatMoney, round3, type SavedInvoice } from "@/lib/invoice-types";
 
 interface PaymentDialogProps {
     invoice: SavedInvoice | null;
@@ -21,8 +21,8 @@ interface PaymentDialogProps {
 type PaymentMode = "add" | "set";
 
 const MODE_OPTIONS: SegmentedOption<PaymentMode>[] = [
-    { value: "add", label: "Add payment" },
-    { value: "set", label: "Set total paid" },
+    { value: "add", label: "إضافة دفعة" },
+    { value: "set", label: "تعديل إجمالي المدفوع" },
 ];
 
 export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDialogProps) {
@@ -45,7 +45,7 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
     const { total } = calcTotals(invoice.items, invoice.discount);
     const paid = invoice.amountPaid || 0;
     const remaining = round3(total - paid);
-    const money = (value: number) => formatAmount(value, invoice.currency);
+    const money = (value: number) => formatMoney(value, invoice.currency, "latin");
 
     // What the paid amount would become with the current input, so the note
     // under the field can warn about an overpayment before Save is pressed.
@@ -57,7 +57,7 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
         if (!invoice) return;
         const value = Number(amount);
         if (amount === "" || Number.isNaN(value) || value < 0 || (mode === "add" && value === 0)) {
-            toast.error("Enter a valid amount.");
+            toast.error("أدخل مبلغاً صحيحاً.");
             return;
         }
         const newPaid = round3(mode === "add" ? paid + value : value);
@@ -77,14 +77,14 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.invoice) {
-                toast.error("Could not record the payment.");
+                toast.error("تعذر تسجيل الدفعة.");
                 return;
             }
-            toast.success("Payment saved");
+            toast.success("تم تحديث حالة الدفع");
             onUpdated(body.invoice as SavedInvoice);
             onClose();
         } catch {
-            toast.error("Could not reach the server.");
+            toast.error("تعذر الاتصال بالخادم.");
         } finally {
             setSaving(false);
         }
@@ -92,23 +92,23 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
 
     return (
         <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Record payment</DialogTitle>
+            <DialogContent dir="rtl" className="sm:max-w-md">
+                <DialogHeader className="pe-8 sm:text-start">
+                    <DialogTitle>تسجيل دفعة</DialogTitle>
                     <DialogDescription>
-                        Invoice #{invoice.docNumber} · <bdi>{invoice.clientName || "—"}</bdi>
+                        فاتورة رقم <span dir="ltr">#{invoice.docNumber}</span> · <bdi>{invoice.clientName || "—"}</bdi>
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="grid grid-cols-3 gap-3 py-2">
-                    <Stat label="Total" value={money(total)} />
-                    <Stat label="Paid" value={money(paid)} />
-                    <Stat label={remaining < 0 ? "Overpaid" : "Remaining"} value={money(Math.abs(remaining))} highlight />
+                    <Stat label="الإجمالي" value={money(total)} />
+                    <Stat label="المدفوع" value={money(paid)} />
+                    <Stat label={remaining < 0 ? "زيادة" : "المتبقي"} value={money(Math.abs(remaining))} highlight />
                 </div>
 
                 <SegmentedTabs
                     variant="radio"
-                    aria-label="Payment mode"
+                    aria-label="طريقة تسجيل الدفعة"
                     value={mode}
                     options={MODE_OPTIONS}
                     onChange={(key) => {
@@ -119,7 +119,7 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                 />
 
                 <div className="space-y-2">
-                    <Label htmlFor="paymentAmount">{mode === "add" ? "Payment amount" : "Total paid"}</Label>
+                    <Label htmlFor="paymentAmount">{mode === "add" ? "مبلغ الدفعة" : "إجمالي المدفوع"}</Label>
                     <div className="flex gap-2">
                         <Input
                             id="paymentAmount"
@@ -127,6 +127,8 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                             min={0}
                             step="any"
                             inputMode="decimal"
+                            dir="ltr"
+                            className="text-end"
                             placeholder="0"
                             value={amount}
                             onChange={(e) => {
@@ -146,7 +148,7 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                                     setOverAcknowledged(false);
                                 }}
                             >
-                                Pay remaining
+                                كامل المتبقي
                             </Button>
                         ) : null}
                     </div>
@@ -154,20 +156,20 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                         <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                             <span>
-                                This exceeds the invoice total by {money(overBy)}.
-                                {overAcknowledged ? " Press Save again to record it anyway." : ""}
+                                هذا المبلغ يتجاوز إجمالي الفاتورة بمقدار <bdi>{money(overBy)}</bdi>.
+                                {overAcknowledged ? " اضغط «حفظ على أي حال» لتأكيد تسجيله." : ""}
                             </span>
                         </p>
                     )}
                 </div>
 
-                <DialogFooter className="gap-2 sm:justify-end">
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
+                <DialogFooter className="gap-2 sm:justify-start">
                     <Button onClick={submit} disabled={saving}>
                         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        {overBy > 0 && overAcknowledged ? "Save anyway" : "Save"}
+                        {overBy > 0 && overAcknowledged ? "حفظ على أي حال" : "حفظ"}
+                    </Button>
+                    <Button variant="outline" onClick={onClose}>
+                        إلغاء
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -179,7 +181,9 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
     return (
         <div className={cn("rounded-lg border p-3", highlight && "border-[#78B7D0]/50 bg-[#78B7D0]/10")}>
             <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">{value}</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+                <bdi>{value}</bdi>
+            </p>
         </div>
     );
 }

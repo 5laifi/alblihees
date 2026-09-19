@@ -17,12 +17,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-    DOC_LABELS_EN,
-    DOC_LABELS_EN_PLURAL,
-    PAYMENT_STATUS_META,
+    DOC_LABELS,
+    DOC_LABELS_PLURAL,
+    PAYMENT_STATUS_META_AR,
     calcTotals,
-    formatAmount,
-    formatDateEn,
+    formatDocDate,
+    formatMoney,
     todayIso,
     type DocumentType,
     type InvoiceSettings,
@@ -41,14 +41,25 @@ interface InvoiceListProps {
     onChanged: () => void;
 }
 
+// "No invoices" needs the indefinite plural; DOC_LABELS_PLURAL is the definite form.
+const EMPTY_TITLES: Record<DocumentType, string> = {
+    invoice: "لا توجد فواتير",
+    quotation: "لا توجد عروض أسعار",
+};
+
 // A copy never carries the old number: the server gives it the next one.
 function toCopyPayload(inv: SavedInvoice): NewInvoiceInput {
     const { documentType, category, projectName, clientName, items, discount, currency, notes, template } = inv;
     return { documentType, issueDate: todayIso(), category, projectName, clientName, items, discount, currency, notes, template };
 }
 
+// Arabic counting: 1 and 2 have their own forms, 3-10 take the plural, 11+ the singular.
 function itemsLabel(count: number): string {
-    return `${count} ${count === 1 ? "service" : "services"}`;
+    if (count === 0) return "لا توجد خدمات";
+    if (count === 1) return "خدمة واحدة";
+    if (count === 2) return "خدمتان";
+    if (count <= 10) return `${count} خدمات`;
+    return `${count} خدمة`;
 }
 
 /** Instalments received so far are shown until the invoice is settled. */
@@ -79,41 +90,41 @@ function RowActions({
     actions: RowActionHandlers;
 }) {
     return (
-        <DropdownMenu>
+        <DropdownMenu dir="rtl">
             <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                     <MoreHorizontal className="h-4 w-4" />
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">الإجراءات</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onSelect={() => actions.preview(invoice)}>
-                    <Eye /> Preview
+                    <Eye /> معاينة
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => actions.print(invoice)}>
-                    <Printer /> Print / PDF
+                    <Printer /> طباعة / PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => actions.edit(invoice)}>
-                    <Pencil /> Edit
+                    <Pencil /> تعديل
                 </DropdownMenuItem>
                 {documentType === "invoice" ? (
                     <DropdownMenuItem onSelect={() => actions.pay(invoice)}>
-                        <Banknote /> Record payment
+                        <Banknote /> تسجيل دفعة
                     </DropdownMenuItem>
                 ) : (
                     <DropdownMenuItem disabled={creating} onSelect={() => actions.convert(invoice)}>
-                        <FileOutput /> Convert to invoice
+                        <FileOutput /> تحويل إلى فاتورة
                     </DropdownMenuItem>
                 )}
                 <DropdownMenuItem disabled={creating} onSelect={() => actions.copy(invoice)}>
-                    <Copy /> Duplicate
+                    <Copy /> نسخ برقم جديد
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                     className="text-red-600 focus:text-red-600 dark:text-red-400"
                     onSelect={() => actions.requestDelete(invoice)}
                 >
-                    <Trash2 /> Delete
+                    <Trash2 /> حذف
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
@@ -130,8 +141,8 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
     const [deleting, setDeleting] = useState<SavedInvoice | null>(null);
     const [removing, setRemoving] = useState(false);
 
-    const label = DOC_LABELS_EN[documentType];
-    const plural = DOC_LABELS_EN_PLURAL[documentType];
+    const label = DOC_LABELS[documentType];
+    const plural = DOC_LABELS_PLURAL[documentType];
     const isInvoice = documentType === "invoice";
 
     const visible = useMemo(() => {
@@ -166,20 +177,20 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
             if (res.status === 409) {
                 toast.error(
                     kind === "convert"
-                        ? "This quotation was already converted to an invoice."
-                        : "Could not assign a new number, please try again."
+                        ? "تم تحويل عرض السعر هذا إلى فاتورة من قبل."
+                        : "تعذر إعطاء رقم جديد، حاول مرة أخرى."
                 );
                 return;
             }
             if (!res.ok || !data.invoice) throw new Error();
             toast.success(
                 kind === "convert"
-                    ? `Invoice #${data.invoice.docNumber} created from the quotation`
-                    : `Copy created as #${data.invoice.docNumber}`
+                    ? `تم إنشاء فاتورة رقم ${data.invoice.docNumber} من عرض السعر`
+                    : `تم إنشاء نسخة برقم ${data.invoice.docNumber}`
             );
             onChanged();
         } catch {
-            toast.error("Could not complete the action.");
+            toast.error("تعذر تنفيذ العملية.");
         } finally {
             setCreating(false);
         }
@@ -192,11 +203,11 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
         try {
             const res = await fetch(`/api/admin/invoices?id=${encodeURIComponent(inv.id)}`, { method: "DELETE" });
             if (!res.ok) throw new Error();
-            toast.success("Deleted");
+            toast.success("تم الحذف");
             setDeleting(null);
             onChanged();
         } catch {
-            toast.error("Could not delete.");
+            toast.error("تعذر الحذف.");
         } finally {
             setRemoving(false);
         }
@@ -215,14 +226,14 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
     return (
         <div className="space-y-4">
             <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                     dir="auto"
-                    placeholder="Search by client, project or number…"
+                    placeholder="ابحث باسم العميل أو المشروع أو رقم المستند..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="pl-9"
-                    aria-label={`Search ${plural.toLowerCase()}`}
+                    className="ps-9"
+                    aria-label={`البحث في ${plural}`}
                 />
             </div>
 
@@ -230,8 +241,8 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                 <div className="rounded-xl border bg-card shadow-sm">
                     <EmptyState
                         icon={FileText}
-                        title={`No ${plural.toLowerCase()}`}
-                        description={query ? "Try a different search." : "Create the first one from the New document tab."}
+                        title={EMPTY_TITLES[documentType]}
+                        description={query ? "جرّب كلمة بحث مختلفة." : `أنشئ أول ${label} من تبويب «إنشاء جديد».`}
                     />
                 </div>
             ) : (
@@ -241,40 +252,42 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                                    <TableHead className="w-16 whitespace-nowrap pl-5 pr-4">#</TableHead>
-                                    <TableHead className="px-4">Client / project</TableHead>
-                                    <TableHead className="whitespace-nowrap px-4">Date</TableHead>
-                                    <TableHead className="whitespace-nowrap px-4 text-right">Total</TableHead>
-                                    <TableHead className="whitespace-nowrap px-4">{isInvoice ? "Payment" : "Items"}</TableHead>
-                                    <TableHead className="w-14 pl-4 pr-5">
-                                        <span className="sr-only">Actions</span>
+                                    <TableHead className="w-16 whitespace-nowrap ps-5 pe-4 text-start">#</TableHead>
+                                    <TableHead className="px-4 text-start">العميل / المشروع</TableHead>
+                                    <TableHead className="whitespace-nowrap px-4 text-start">التاريخ</TableHead>
+                                    <TableHead className="whitespace-nowrap px-4 text-end">الإجمالي</TableHead>
+                                    <TableHead className="whitespace-nowrap px-4 text-start">{isInvoice ? "حالة الدفع" : "عدد الخدمات"}</TableHead>
+                                    <TableHead className="w-14 ps-4 pe-5 text-start">
+                                        <span className="sr-only">الإجراءات</span>
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {visible.map((inv) => {
                                     const { total } = calcTotals(inv.items, inv.discount);
-                                    const status = PAYMENT_STATUS_META[inv.paymentStatus];
+                                    const status = PAYMENT_STATUS_META_AR[inv.paymentStatus];
                                     return (
                                         <TableRow key={inv.id}>
-                                            <TableCell className="py-3 pl-5 pr-4 font-medium tabular-nums">#{inv.docNumber}</TableCell>
+                                            <TableCell className="py-3 ps-5 pe-4 font-medium tabular-nums">
+                                                <span dir="ltr">#{inv.docNumber}</span>
+                                            </TableCell>
                                             <TableCell className="px-4 py-3">
                                                 <div className="max-w-[28rem]">
-                                                    <p dir="auto" className="truncate text-left font-medium">
+                                                    <p dir="auto" className="truncate text-start font-medium">
                                                         {inv.clientName || "—"}
                                                     </p>
                                                     {inv.projectName && (
-                                                        <p dir="auto" className="truncate text-left text-xs text-muted-foreground">
+                                                        <p dir="auto" className="truncate text-start text-xs text-muted-foreground">
                                                             {inv.projectName}
                                                         </p>
                                                     )}
                                                 </div>
                                             </TableCell>
                                             <TableCell className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                                                {formatDateEn(inv.issueDate)}
+                                                <span dir="ltr">{formatDocDate(inv.issueDate)}</span>
                                             </TableCell>
-                                            <TableCell className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
-                                                {formatAmount(total, inv.currency)}
+                                            <TableCell className="whitespace-nowrap px-4 py-3 text-end font-semibold tabular-nums">
+                                                <bdi>{formatMoney(total, inv.currency, "latin")}</bdi>
                                             </TableCell>
                                             <TableCell className="px-4 py-3">
                                                 {isInvoice ? (
@@ -282,7 +295,7 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                                                         <StatusPill tone={status.tone}>{status.label}</StatusPill>
                                                         {showPaidLine(inv) && (
                                                             <span className="text-xs tabular-nums text-muted-foreground">
-                                                                Paid {formatAmount(inv.amountPaid, inv.currency)}
+                                                                المدفوع: <bdi>{formatMoney(inv.amountPaid, inv.currency, "latin")}</bdi>
                                                             </span>
                                                         )}
                                                     </div>
@@ -290,7 +303,7 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                                                     <span className="text-muted-foreground">{itemsLabel(inv.items.length)}</span>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="py-3 pl-4 pr-5 text-right">
+                                            <TableCell className="py-3 ps-4 pe-5 text-end">
                                                 <RowActions invoice={inv} documentType={documentType} creating={creating} actions={actions} />
                                             </TableCell>
                                         </TableRow>
@@ -304,26 +317,30 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                     <ul className="lg:hidden">
                         {visible.map((inv) => {
                             const { total } = calcTotals(inv.items, inv.discount);
-                            const status = PAYMENT_STATUS_META[inv.paymentStatus];
+                            const status = PAYMENT_STATUS_META_AR[inv.paymentStatus];
                             return (
                                 <li key={inv.id} className="flex items-start justify-between gap-3 border-b p-4 last:border-b-0">
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-baseline gap-2">
-                                            <span className="shrink-0 text-sm font-medium tabular-nums">#{inv.docNumber}</span>
-                                            <p dir="auto" className="min-w-0 truncate text-left text-sm font-medium">
+                                            <span dir="ltr" className="shrink-0 text-sm font-medium tabular-nums">
+                                                #{inv.docNumber}
+                                            </span>
+                                            <p dir="auto" className="min-w-0 truncate text-start text-sm font-medium">
                                                 {inv.clientName || "—"}
                                             </p>
                                         </div>
                                         {inv.projectName && (
-                                            <p dir="auto" className="mt-0.5 truncate text-left text-xs text-muted-foreground">
+                                            <p dir="auto" className="mt-0.5 truncate text-start text-xs text-muted-foreground">
                                                 {inv.projectName}
                                             </p>
                                         )}
                                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-                                            <span className="whitespace-nowrap">{formatDateEn(inv.issueDate)}</span>
-                                            <span className="whitespace-nowrap font-semibold tabular-nums text-foreground">
-                                                {formatAmount(total, inv.currency)}
+                                            <span dir="ltr" className="whitespace-nowrap">
+                                                {formatDocDate(inv.issueDate)}
                                             </span>
+                                            <bdi className="whitespace-nowrap font-semibold tabular-nums text-foreground">
+                                                {formatMoney(total, inv.currency, "latin")}
+                                            </bdi>
                                             {isInvoice ? (
                                                 <StatusPill tone={status.tone}>{status.label}</StatusPill>
                                             ) : (
@@ -332,7 +349,7 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                                         </div>
                                         {isInvoice && showPaidLine(inv) && (
                                             <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
-                                                Paid {formatAmount(inv.amountPaid, inv.currency)}
+                                                المدفوع: <bdi>{formatMoney(inv.amountPaid, inv.currency, "latin")}</bdi>
                                             </p>
                                         )}
                                     </div>
@@ -348,15 +365,14 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
 
             {/* Preview */}
             <Dialog open={preview !== null} onOpenChange={(next) => !next && setPreview(null)}>
-                <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
-                    <DialogHeader>
+                <DialogContent dir="rtl" className="max-w-3xl max-h-[92vh] overflow-y-auto">
+                    <DialogHeader className="pe-8 sm:text-start">
                         <DialogTitle>
-                            Preview — {label}
-                            {preview ? ` #${preview.docNumber}` : ""}
+                            معاينة {label} {preview ? <span dir="ltr">#{preview.docNumber}</span> : null}
                         </DialogTitle>
                         {preview && (
                             <DialogDescription>
-                                <bdi>{preview.clientName || "—"}</bdi> · {formatDateEn(preview.issueDate)}
+                                <bdi>{preview.clientName || "—"}</bdi> · <span dir="ltr">{formatDocDate(preview.issueDate)}</span>
                             </DialogDescription>
                         )}
                     </DialogHeader>
@@ -365,12 +381,12 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
                             <ScaledPreview>
                                 <InvoiceDocument data={preview} settings={settings} paymentStatus={preview.paymentStatus} />
                             </ScaledPreview>
-                            <DialogFooter className="gap-2 sm:justify-end">
-                                <Button variant="outline" onClick={() => setPreview(null)}>
-                                    Close
-                                </Button>
+                            <DialogFooter className="gap-2 sm:justify-start">
                                 <Button onClick={() => openPrint(preview)}>
-                                    <Printer className="h-4 w-4" /> Print / download PDF
+                                    <Printer className="h-4 w-4" /> طباعة / تحميل PDF
+                                </Button>
+                                <Button variant="outline" onClick={() => setPreview(null)}>
+                                    إغلاق
                                 </Button>
                             </DialogFooter>
                         </>
@@ -380,21 +396,20 @@ export function InvoiceList({ documentType, invoices, settings, onEdit, onChange
 
             {/* Delete confirmation */}
             <Dialog open={deleting !== null} onOpenChange={(next) => !next && !removing && setDeleting(null)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
+                <DialogContent dir="rtl" className="sm:max-w-md">
+                    <DialogHeader className="pe-8 sm:text-start">
                         <DialogTitle>
-                            Delete {label}
-                            {deleting ? ` #${deleting.docNumber}` : ""}?
+                            حذف {label} {deleting ? <span dir="ltr">#{deleting.docNumber}</span> : null}؟
                         </DialogTitle>
-                        <DialogDescription>This permanently removes the document. This cannot be undone.</DialogDescription>
+                        <DialogDescription>سيُحذف المستند نهائياً، ولا يمكن التراجع عن هذا الإجراء.</DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="gap-2 sm:justify-end">
-                        <Button variant="outline" onClick={() => setDeleting(null)} disabled={removing}>
-                            Cancel
-                        </Button>
+                    <DialogFooter className="gap-2 sm:justify-start">
                         <Button variant="destructive" onClick={() => deleting && remove(deleting)} disabled={removing}>
                             {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                            Delete
+                            حذف
+                        </Button>
+                        <Button variant="outline" onClick={() => setDeleting(null)} disabled={removing}>
+                            إلغاء
                         </Button>
                     </DialogFooter>
                 </DialogContent>
