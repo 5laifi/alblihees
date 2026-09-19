@@ -111,9 +111,12 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, InvoiceDocumentProps>(
     const showTotals = data.items.length > 1 || data.discount > 0;
     const isPaid = data.documentType === "invoice" && paymentStatus === "paid";
 
-    const terms = data.documentType === "quotation" ? settings.quotationTerms : settings.invoiceTerms;
-    const hasCheque = Boolean(settings.payeeName);
-    const hasBank = Boolean(settings.iban || settings.accountNumber || settings.accountName);
+    // Payment details are printed on invoices only, never on quotations.
+    // `!== false` keeps them visible for settings saved before the switch existed.
+    const showPayment = data.documentType === "invoice" && settings.showPaymentDetails !== false;
+    const terms = settings.invoiceTerms;
+    const hasCheque = showPayment && Boolean(settings.payeeName);
+    const hasBank = showPayment && Boolean(settings.iban || settings.accountNumber || settings.accountName);
     const hasLiaison = Boolean(settings.liaisonName || settings.liaisonPhone);
     const contacts = [
         { icon: Phone, value: settings.phone },

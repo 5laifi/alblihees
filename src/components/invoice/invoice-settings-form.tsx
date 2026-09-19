@@ -30,6 +30,7 @@ interface Props {
 // The sample stays Arabic on purpose: the printed document is always Arabic,
 // only the admin chrome around it is English.
 const SAMPLE = emptyInvoice({
+    documentType: "invoice", // so the preview shows the payment details block
     docNumber: 100,
     clientName: "اسم العميل",
     projectName: "اسم المشروع",
@@ -103,23 +104,21 @@ export function InvoiceSettingsForm({ settings, onSaved }: Props) {
 
                 <SectionCard
                     title="Payment details"
-                    description="Stored in the database only, never in the code. Leave a field empty to hide it from the document."
+                    description="Printed on invoices only, never on quotations. An empty field goes back to the built-in value."
                     contentClassName={FIELD_GRID}
                 >
+                    <div className="flex items-center gap-3 sm:col-span-2">
+                        <Switch
+                            id="set-showPaymentDetails"
+                            checked={form.showPaymentDetails}
+                            onCheckedChange={(v) => set("showPaymentDetails", v)}
+                        />
+                        <Label htmlFor="set-showPaymentDetails">Show payment details on invoices</Label>
+                    </div>
                     {text("payeeName", "Cheque payee name", { auto: true, className: "sm:col-span-2" })}
                     {text("iban", "IBAN", { className: "sm:col-span-2" })}
                     {text("accountNumber", "Account number")}
                     {text("accountName", "Account name (English)")}
-                    <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="set-quotationTerms">Payment text on quotations</Label>
-                        <Textarea
-                            id="set-quotationTerms"
-                            rows={2}
-                            dir="auto"
-                            value={form.quotationTerms}
-                            onChange={(e) => set("quotationTerms", e.target.value)}
-                        />
-                    </div>
                     <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="set-invoiceTerms">Payment text on invoices</Label>
                         <Textarea

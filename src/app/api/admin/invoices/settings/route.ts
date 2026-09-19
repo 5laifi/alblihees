@@ -16,6 +16,7 @@ const settingsSchema = z.object({
     phone: z.string().trim().max(40),
     email: z.string().trim().max(160),
     website: z.string().trim().max(160),
+    showPaymentDetails: z.boolean(),
     payeeName: z.string().trim().max(160),
     iban: z.string().trim().max(64),
     accountNumber: z.string().trim().max(64),

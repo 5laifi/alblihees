@@ -48,7 +48,9 @@ export interface InvoiceSettings {
     phone: string;
     email: string;
     website: string;
-    // Payment details (kept in the database, never in source code)
+    // Payment details, printed on invoices only (never on quotations).
+    // Saved values win; an empty field falls back to the built-in default.
+    showPaymentDetails: boolean;
     payeeName: string;
     iban: string;
     accountNumber: string;
@@ -73,13 +75,14 @@ export interface InvoiceSettings {
 export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
     businessNameEn: "Thari Alblaihees",
     tagline: "شــــغــف يـــصــنــع أثــــر",
-    phone: "",
+    phone: "+96551414145",
     email: "Tharii@me.com",
     website: "www.alblaihees.com",
-    payeeName: "",
-    iban: "",
-    accountNumber: "",
-    accountName: "",
+    showPaymentDetails: true,
+    payeeName: "ضارى مشعل حمد البليهيس",
+    iban: "KW33BBYN0000000000000159489007",
+    accountNumber: "0159489007",
+    accountName: "DHARI M H ALBLAIHEES",
     liaisonTitle: "ضابط دائرة الإتصال",
     liaisonName: "",
     liaisonPhone: "",
@@ -92,6 +95,18 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
     defaultTemplate: "stage",
     startNumber: 1,
 };
+
+/** Settings that fall back to the built-in value when saved empty. */
+export const PAYMENT_DETAIL_KEYS = ["payeeName", "iban", "accountNumber", "accountName", "invoiceTerms"] as const;
+
+/** Fills empty payment fields from DEFAULT_INVOICE_SETTINGS; everything else is kept as saved. */
+export function withPaymentFallbacks(settings: InvoiceSettings): InvoiceSettings {
+    const next = { ...settings };
+    for (const key of PAYMENT_DETAIL_KEYS) {
+        if (!String(next[key] ?? "").trim()) next[key] = DEFAULT_INVOICE_SETTINGS[key];
+    }
+    return next;
+}
 
 export const TEMPLATES: { key: InvoiceTemplate; label: string; hint: string }[] = [
     { key: "stage", label: "المسرح", hint: "صورة المسرح الداكنة" },
