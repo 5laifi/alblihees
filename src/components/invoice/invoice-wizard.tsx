@@ -12,14 +12,13 @@ import { InlineNotice, SectionCard, SegmentedTabs } from "@/components/admin/ui"
 import { cn } from "@/lib/utils";
 import {
     CURRENCIES,
-    DOC_LABELS_EN,
+    DOC_LABELS,
     TEMPLATES,
-    TEMPLATE_LABELS_EN,
     calcTotals,
-    currencyLabelEn,
+    currencySymbol,
     docFileName,
     emptyInvoice,
-    formatAmount,
+    formatMoney,
     newItemId,
     statusForPayment,
     type DocumentType,
@@ -41,9 +40,9 @@ interface InvoiceWizardProps {
 }
 
 const STEPS: { title: string; description: string }[] = [
-    { title: "Document details", description: "Start with the basics: type, client and project." },
-    { title: "Services", description: "Add the services with a description and a price." },
-    { title: "Review", description: "Check the details and apply a discount if needed." },
+    { title: "بيانات المستند", description: "نبدأ بالأساسيات: النوع، العميل، والمشروع." },
+    { title: "الخدمات", description: "أضف الخدمات المطلوبة ووصف كل منها وتكلفتها." },
+    { title: "المراجعة", description: "راجع التفاصيل وطبّق الخصم إن وجد." },
 ];
 
 type ItemDraft = { description: string; price: string; quantity: string };
@@ -94,6 +93,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
     }, []);
 
     const totals = useMemo(() => calcTotals(data.items, data.discount), [data.items, data.discount]);
+    const symbol = currencySymbol(data.currency);
 
     function update<K extends keyof InvoiceData>(field: K, value: InvoiceData[K]) {
         setData((prev) => ({ ...prev, [field]: value }));
@@ -165,15 +165,13 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.invoice) {
-                if (body.code === "SETUP_REQUIRED") toast.error("The database is not set up yet.");
+                if (body.code === "SETUP_REQUIRED") toast.error("قاعدة البيانات غير مهيأة بعد");
                 else if (body.code === "DUPLICATE_NUMBER")
-                    toast.error(
-                        `Another ${DOC_LABELS_EN[data.documentType].toLowerCase()} already uses number ${data.docNumber}; the document type cannot be changed.`
-                    );
+                    toast.error(`يوجد ${DOC_LABELS[data.documentType]} آخر بالرقم ${data.docNumber}، لا يمكن تغيير نوع هذا المستند`);
                 else if (res.status === 400) {
                     const field = Array.isArray(body.issues) ? body.issues[0]?.path?.[0] : undefined;
-                    toast.error(field ? `Invalid value in field: ${String(field)}` : "The document data is invalid.");
-                } else toast.error("Could not save the document.");
+                    toast.error(field ? `بيانات غير صالحة في الحقل: ${String(field)}` : "بيانات المستند غير صالحة");
+                } else toast.error("تعذر حفظ المستند");
                 return;
             }
 
@@ -191,14 +189,14 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                     await exportNodeToPdf(docRef.current, docFileName(saved));
                 } catch (error) {
                     console.error("PDF export failed:", error);
-                    toast.error("Saved, but the PDF could not be generated.");
+                    toast.error("تم الحفظ، لكن تعذر إنشاء ملف PDF");
                 }
             }
 
-            toast.success(`${DOC_LABELS_EN[saved.documentType]} #${saved.docNumber} saved`);
+            toast.success(`تم حفظ ${DOC_LABELS[saved.documentType]} رقم ${saved.docNumber}`);
             onSaved(saved);
         } catch {
-            toast.error("Could not reach the server.");
+            toast.error("تعذر الاتصال بالخادم");
         } finally {
             setBusy(null);
         }
@@ -216,19 +214,22 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                         icon={Pencil}
                         title={
                             <>
-                                Editing {DOC_LABELS_EN[editing.documentType]} #{editing.docNumber}
+                                تعديل {DOC_LABELS[editing.documentType]} رقم{" "}
+                                <span dir="ltr" className="tabular-nums">
+                                    {editing.docNumber}
+                                </span>
                             </>
                         }
                         action={
                             <Button variant="ghost" size="sm" onClick={onCancelEdit} className="gap-1.5">
-                                <X className="h-4 w-4" /> Cancel editing
+                                <X className="h-4 w-4" /> إلغاء التعديل
                             </Button>
                         }
                     />
                 ) : null}
 
                 {/* Stepper */}
-                <nav aria-label="Progress">
+                <nav aria-label="خطوات إعداد المستند">
                     <ol className="flex items-center gap-2 sm:gap-3">
                         {STEPS.map((s, index) => {
                             const number = index + 1;
@@ -240,7 +241,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                         type="button"
                                         aria-current={isCurrent ? "step" : undefined}
                                         onClick={() => (number < step || stepOneValid) && setStep(number)}
-                                        className="flex items-center gap-2 rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        className="flex items-center gap-2 rounded-md text-start transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                     >
                                         <span
                                             className={cn(
@@ -281,15 +282,15 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                         {step === 1 && (
                             <>
                                 <div className="space-y-2">
-                                    <Label>Document type</Label>
+                                    <Label>نوع المستند</Label>
                                     <SegmentedTabs<DocumentType>
                                         variant="radio"
-                                        aria-label="Document type"
+                                        aria-label="نوع المستند"
                                         value={data.documentType}
                                         onChange={(v) => update("documentType", v)}
                                         options={[
-                                            { value: "quotation", label: "Quotation" },
-                                            { value: "invoice", label: "Invoice" },
+                                            { value: "quotation", label: DOC_LABELS.quotation },
+                                            { value: "invoice", label: DOC_LABELS.invoice },
                                         ]}
                                     />
                                 </div>
@@ -297,36 +298,46 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 <div className="space-y-2">
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label id="docNumberLabel">Document number</Label>
+                                            <Label id="docNumberLabel">رقم المستند</Label>
                                             <div
                                                 role="status"
                                                 aria-labelledby="docNumberLabel"
                                                 className="flex h-9 items-center justify-between rounded-md border border-dashed bg-muted/50 px-3 text-sm"
                                             >
-                                                <span className="font-semibold tabular-nums">{data.docNumber}</span>
+                                                <span dir="ltr" className="font-semibold tabular-nums">
+                                                    {data.docNumber}
+                                                </span>
                                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <Lock className="h-3 w-3" /> Assigned automatically
+                                                    <Lock className="h-3 w-3" /> تلقائي
                                                 </span>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="issueDate">Issue date</Label>
-                                            <Input id="issueDate" type="date" aria-invalid={!dateValid} value={data.issueDate} onChange={(e) => update("issueDate", e.target.value)} />
+                                            <Label htmlFor="issueDate">التاريخ</Label>
+                                            <Input
+                                                id="issueDate"
+                                                type="date"
+                                                dir="ltr"
+                                                className="text-end"
+                                                aria-invalid={!dateValid}
+                                                value={data.issueDate}
+                                                onChange={(e) => update("issueDate", e.target.value)}
+                                            />
                                         </div>
                                     </div>
                                     <p className="text-xs text-muted-foreground">
                                         {editing
-                                            ? "The number is fixed once the document is saved."
-                                            : "Numbers are assigned in sequence when you save and appear on the document and in the list."}
+                                            ? "رقم المستند ثابت ولا يمكن تغييره بعد الحفظ."
+                                            : "يُعطى الرقم تلقائياً بالتسلسل عند الحفظ، ويظهر نفسه في المستند وفي القائمة."}
                                     </p>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="clientName">Client</Label>
+                                    <Label htmlFor="clientName">من هو العميل؟</Label>
                                     <Input
                                         id="clientName"
                                         dir="auto"
-                                        placeholder="Organization or person"
+                                        placeholder="اسم الجهة أو الشخص"
                                         value={data.clientName}
                                         onChange={(e) => update("clientName", e.target.value)}
                                         autoFocus
@@ -334,23 +345,23 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="projectName">Project</Label>
+                                    <Label htmlFor="projectName">ما اسم المشروع؟</Label>
                                     <Input
                                         id="projectName"
                                         dir="auto"
-                                        placeholder="e.g. حفل تكريم الطلبة المتفوقين"
+                                        placeholder="مثال: حفل تكريم الطلبة المتفوقين"
                                         value={data.projectName}
                                         onChange={(e) => update("projectName", e.target.value)}
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="category">Service heading (optional)</Label>
+                                    <Label htmlFor="category">عنوان الخدمة (اختياري)</Label>
                                     <Input
                                         id="category"
                                         dir="auto"
                                         list="invoice-categories"
-                                        placeholder="e.g. الإنتاج المسرحي"
+                                        placeholder="مثال: الإنتاج المسرحي"
                                         value={data.category}
                                         onChange={(e) => update("category", e.target.value)}
                                     />
@@ -362,20 +373,19 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label>Template</Label>
+                                    <Label>القالب</Label>
                                     <div className="grid grid-cols-3 gap-3">
                                         {TEMPLATES.map((t) => {
-                                            const meta = TEMPLATE_LABELS_EN[t.key];
                                             const selected = data.template === t.key;
                                             return (
                                                 <button
                                                     key={t.key}
                                                     type="button"
-                                                    aria-label={`${meta.label} template`}
+                                                    aria-label={`قالب ${t.label}`}
                                                     aria-pressed={selected}
                                                     onClick={() => update("template", t.key)}
                                                     className={cn(
-                                                        "rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                                        "rounded-lg border p-3 text-start transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                                                         selected ? "border-[#78B7D0] ring-2 ring-[#78B7D0]/40 bg-[#78B7D0]/10" : "hover:bg-muted/60"
                                                     )}
                                                 >
@@ -387,8 +397,8 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                                                 : { backgroundImage: `url(/invoice/hero-${t.key}.jpg)` }
                                                         }
                                                     />
-                                                    <div className="text-sm font-medium">{meta.label}</div>
-                                                    <div className="text-[11px] leading-snug text-muted-foreground">{meta.hint}</div>
+                                                    <div className="text-sm font-medium">{t.label}</div>
+                                                    <div className="text-[11px] leading-snug text-muted-foreground">{t.hint}</div>
                                                 </button>
                                             );
                                         })}
@@ -401,25 +411,27 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                             <>
                                 <div className="space-y-4 rounded-lg border bg-muted/40 p-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="itemDescription">Description</Label>
+                                        <Label htmlFor="itemDescription">الوصف</Label>
                                         <Textarea
                                             id="itemDescription"
                                             rows={4}
                                             dir="auto"
-                                            placeholder={"e.g.\nحضور وتقديم الحفل\nيوم الأربعاء 23 سبتمبر الساعة 8 م"}
+                                            placeholder={"مثال:\nحضور وتقديم الحفل\nيوم الأربعاء 23 سبتمبر الساعة 8 م"}
                                             value={draft.description}
                                             onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                                         />
-                                        <p className="text-xs text-muted-foreground">Each new line becomes its own line on the document.</p>
+                                        <p className="text-xs text-muted-foreground">كل سطر جديد يظهر كسطر مستقل في المستند.</p>
                                     </div>
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label htmlFor="itemPrice">Price ({data.currency})</Label>
+                                            <Label htmlFor="itemPrice">السعر ({symbol})</Label>
                                             <Input
                                                 id="itemPrice"
                                                 type="number"
                                                 min={0}
                                                 step="any"
+                                                dir="ltr"
+                                                className="text-end"
                                                 placeholder="0"
                                                 value={draft.price}
                                                 onChange={(e) => setDraft({ ...draft, price: e.target.value })}
@@ -427,12 +439,14 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label htmlFor="itemQty">Quantity</Label>
+                                            <Label htmlFor="itemQty">الكمية</Label>
                                             <Input
                                                 id="itemQty"
                                                 type="number"
                                                 min={0}
                                                 step="any"
+                                                dir="ltr"
+                                                className="text-end"
                                                 value={draft.quantity}
                                                 onChange={(e) => setDraft({ ...draft, quantity: e.target.value })}
                                                 onKeyDown={commitOnEnter}
@@ -441,12 +455,12 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                     </div>
                                     <Button onClick={commitItem} className="w-full gap-2" disabled={!draftValid}>
                                         {editingItemId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                                        {editingItemId ? "Update service" : "Add service"}
+                                        {editingItemId ? "تحديث الخدمة" : "إضافة الخدمة"}
                                     </Button>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <p className="text-sm font-medium">Services added ({data.items.length})</p>
+                                    <p className="text-sm font-medium">الخدمات المضافة ({data.items.length})</p>
                                     <div className="space-y-2">
                                         {data.items.map((item) => (
                                             <div
@@ -457,15 +471,15 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                                 )}
                                             >
                                                 <div className="min-w-0">
-                                                    <p dir="auto" className="whitespace-pre-line break-words text-left font-medium">
+                                                    <p dir="auto" className="whitespace-pre-line break-words font-medium">
                                                         {item.description}
                                                     </p>
                                                     <p className="mt-1 text-sm text-muted-foreground">
-                                                        {item.quantity} × {formatAmount(item.price, data.currency)}
+                                                        {item.quantity} × {formatMoney(item.price, data.currency, "latin")}
                                                     </p>
                                                 </div>
                                                 <div className="flex shrink-0">
-                                                    <Button variant="ghost" size="icon" onClick={() => editItem(item)} title="Edit" aria-label="Edit service">
+                                                    <Button variant="ghost" size="icon" onClick={() => editItem(item)} title="تعديل" aria-label="تعديل الخدمة">
                                                         <Pencil className="h-4 w-4" />
                                                     </Button>
                                                     <Button
@@ -473,8 +487,8 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                                         size="icon"
                                                         onClick={() => removeItem(item.id)}
                                                         className="text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
-                                                        title="Remove"
-                                                        aria-label="Remove service"
+                                                        title="حذف"
+                                                        aria-label="حذف الخدمة"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
@@ -482,7 +496,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                             </div>
                                         ))}
                                         {data.items.length === 0 ? (
-                                            <p className="py-4 text-center text-sm text-muted-foreground">No services added yet.</p>
+                                            <p className="py-4 text-center text-sm text-muted-foreground">لم تتم إضافة أي خدمة بعد.</p>
                                         ) : null}
                                     </div>
                                 </div>
@@ -493,7 +507,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                             <>
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="space-y-2">
-                                        <Label htmlFor="currency">Currency</Label>
+                                        <Label htmlFor="currency">العملة</Label>
                                         <Select value={data.currency} onValueChange={(v) => update("currency", v)}>
                                             <SelectTrigger id="currency">
                                                 <SelectValue />
@@ -501,7 +515,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                             <SelectContent>
                                                 {CURRENCIES.map((c) => (
                                                     <SelectItem key={c.code} value={c.code}>
-                                                        {c.code} — {currencyLabelEn(c.code)}
+                                                        {c.label} ({c.symbol})
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -510,18 +524,18 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 </div>
 
                                 <div className="space-y-3">
-                                    <Label>Discount</Label>
+                                    <Label>الخصم</Label>
                                     <SegmentedTabs<"percentage" | "amount">
                                         variant="radio"
-                                        aria-label="Discount mode"
+                                        aria-label="طريقة الخصم"
                                         value={discountMode}
                                         onChange={(mode) => {
                                             setDiscountMode(mode);
                                             if (mode === "amount") setTargetAmount(String(totals.total));
                                         }}
                                         options={[
-                                            { value: "percentage", label: "Percentage" },
-                                            { value: "amount", label: "Final amount" },
+                                            { value: "percentage", label: "نسبة مئوية (٪)" },
+                                            { value: "amount", label: "المبلغ النهائي" },
                                         ]}
                                     />
                                     <div className="flex flex-wrap items-center gap-3">
@@ -532,13 +546,14 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                                     min={0}
                                                     max={100}
                                                     step="any"
-                                                    aria-label="Discount percentage"
-                                                    className="max-w-[140px]"
+                                                    dir="ltr"
+                                                    aria-label="نسبة الخصم"
+                                                    className="max-w-[140px] text-end"
                                                     value={data.discount || ""}
                                                     placeholder="0"
                                                     onChange={(e) => update("discount", Math.max(0, Math.min(100, Number(e.target.value))))}
                                                 />
-                                                <span className="text-sm text-muted-foreground">Enter a percentage from 0 to 100</span>
+                                                <span className="text-sm text-muted-foreground">أدخل النسبة من 0 إلى 100</span>
                                             </>
                                         ) : (
                                             <>
@@ -546,13 +561,14 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                                     type="number"
                                                     min={0}
                                                     step="any"
-                                                    aria-label="Final amount"
-                                                    className="max-w-[140px]"
+                                                    dir="ltr"
+                                                    aria-label="المبلغ النهائي"
+                                                    className="max-w-[140px] text-end"
                                                     value={targetAmount}
                                                     onChange={(e) => setTargetAmount(e.target.value)}
                                                 />
                                                 <span className="text-sm text-muted-foreground">
-                                                    Amount after discount (subtotal: {formatAmount(totals.subtotal, data.currency)})
+                                                    المبلغ بعد الخصم (المجموع: {formatMoney(totals.subtotal, data.currency, "latin")})
                                                 </span>
                                             </>
                                         )}
@@ -560,27 +576,27 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="notes">Notes</Label>
+                                    <Label htmlFor="notes">ملاحظات</Label>
                                     <Textarea
                                         id="notes"
                                         rows={3}
                                         dir="auto"
-                                        placeholder="Notes or extra terms shown on the document…"
+                                        placeholder="أي ملاحظات أو شروط إضافية تظهر في المستند…"
                                         value={data.notes}
                                         onChange={(e) => update("notes", e.target.value)}
                                     />
                                 </div>
 
                                 <div className="space-y-2 rounded-lg border bg-muted/40 p-4">
-                                    <SummaryRow label="Subtotal" value={formatAmount(totals.subtotal, data.currency)} />
+                                    <SummaryRow label="المجموع" value={formatMoney(totals.subtotal, data.currency, "latin")} />
                                     <SummaryRow
-                                        label={`Discount (${Number(data.discount.toFixed(2))}%)`}
-                                        value={`- ${formatAmount(totals.discountAmount, data.currency)}`}
+                                        label={`الخصم (${Number(data.discount.toFixed(2))}٪)`}
+                                        value={`- ${formatMoney(totals.discountAmount, data.currency, "latin")}`}
                                         muted
                                     />
                                     <div className="flex justify-between border-t pt-2 text-base font-semibold">
-                                        <span>Total</span>
-                                        <span className="tabular-nums">{formatAmount(totals.total, data.currency)}</span>
+                                        <span>الإجمالي</span>
+                                        <span className="tabular-nums">{formatMoney(totals.total, data.currency, "latin")}</span>
                                     </div>
                                 </div>
                             </>
@@ -589,7 +605,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
 
                     <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-5 py-4">
                         <Button variant="outline" onClick={() => setStep((s) => s - 1)} disabled={step === 1} className="gap-2">
-                            <ArrowLeft className="h-4 w-4" /> Back
+                            <ArrowRight className="h-4 w-4" /> السابق
                         </Button>
 
                         {step < 3 ? (
@@ -598,17 +614,17 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
                                 disabled={(step === 1 && !stepOneValid) || (step === 2 && data.items.length === 0)}
                                 className="gap-2"
                             >
-                                Next <ArrowRight className="h-4 w-4" />
+                                التالي <ArrowLeft className="h-4 w-4" />
                             </Button>
                         ) : (
                             <div className="flex flex-wrap gap-2">
                                 <Button variant="outline" onClick={() => save(false)} disabled={!canSave || busy !== null} className="gap-2">
                                     {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                    Save
+                                    حفظ
                                 </Button>
                                 <Button onClick={() => save(true)} disabled={!canSave || busy !== null} className="gap-2">
                                     {busy === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                                    Save &amp; download PDF
+                                    حفظ وتحميل PDF
                                 </Button>
                             </div>
                         )}
@@ -618,7 +634,7 @@ export function InvoiceWizard({ editing, settings, nextNumber, onSaved, onCancel
 
             {/* ---------- Live preview ---------- */}
             <div className="min-w-0 lg:sticky lg:top-4">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Live preview</p>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">معاينة مباشرة</p>
                 <div className="rounded-xl border bg-muted/30 p-3 sm:p-5">
                     <ScaledPreview>
                         <InvoiceDocument
