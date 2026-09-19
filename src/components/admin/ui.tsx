@@ -167,9 +167,13 @@ export function SegmentedTabs<T extends string>({
 
     function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
         const index = options.findIndex((option) => option.value === value);
+        // In a right-to-left context the "next" option sits to the left.
+        const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
+        const forward = rtl ? "ArrowLeft" : "ArrowRight";
+        const backward = rtl ? "ArrowRight" : "ArrowLeft";
         let next = index;
-        if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % options.length;
-        else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + options.length) % options.length;
+        if (event.key === forward || event.key === "ArrowDown") next = (index + 1) % options.length;
+        else if (event.key === backward || event.key === "ArrowUp") next = (index - 1 + options.length) % options.length;
         else if (event.key === "Home") next = 0;
         else if (event.key === "End") next = options.length - 1;
         else return;

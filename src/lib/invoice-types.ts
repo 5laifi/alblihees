@@ -129,6 +129,18 @@ export const DOC_LABELS: Record<DocumentType, string> = {
     quotation: "عرض سعر",
 };
 
+export const DOC_LABELS_PLURAL: Record<DocumentType, string> = {
+    invoice: "الفواتير",
+    quotation: "عروض الأسعار",
+};
+
+/** Arabic payment-status labels with the pill tone used by the admin screens. */
+export const PAYMENT_STATUS_META_AR: Record<PaymentStatus, { label: string; tone: "red" | "amber" | "green" }> = {
+    unpaid: { label: "غير مدفوعة", tone: "red" },
+    partial: { label: "مدفوعة جزئياً", tone: "amber" },
+    paid: { label: "مدفوعة", tone: "green" },
+};
+
 export const STATUS_LABELS: Record<PaymentStatus, string> = {
     unpaid: "غير مدفوعة",
     partial: "مدفوعة جزئياً",
