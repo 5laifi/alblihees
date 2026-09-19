@@ -5,7 +5,6 @@ import {
     AlertCircle,
     Banknote,
     Clock,
-    Database,
     FilePlus2,
     FileText,
     HardDrive,
@@ -17,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { InlineNotice, PageHeader, SegmentedTabs, StatTile, StatusPill } from "@/components/admin/ui";
+import { InlineNotice, PageHeader, SegmentedTabs, StatTile } from "@/components/admin/ui";
 import { InvoiceList } from "@/components/invoice/invoice-list";
 import { InvoiceSettingsForm } from "@/components/invoice/invoice-settings-form";
 import { InvoiceWizard } from "@/components/invoice/invoice-wizard";
@@ -126,11 +125,6 @@ export default function AdminInvoicesPage() {
         }
     }
 
-    function startNew() {
-        setEditing(null);
-        setTab("create");
-    }
-
     const count = (type: SavedInvoice["documentType"]) => invoices.filter((inv) => inv.documentType === type).length;
     const summary = summarizeDocuments(invoices);
     const awaiting = summary.unpaid + summary.partial;
@@ -153,23 +147,6 @@ export default function AdminInvoicesPage() {
             <PageHeader
                 title="الفواتير وعروض الأسعار"
                 description="أنشئ مستنداتك بهوية ضاري البليهيس واحفظها وتابع حالة الدفع."
-                actions={
-                    <>
-                        {storage === "supabase" && (
-                            <StatusPill tone="green">
-                                <Database className="h-3 w-3" /> متصل بقاعدة البيانات
-                            </StatusPill>
-                        )}
-                        {storage === "local" && (
-                            <StatusPill tone="amber">
-                                <HardDrive className="h-3 w-3" /> وضع المعاينة: الحفظ على هذا الجهاز فقط
-                            </StatusPill>
-                        )}
-                        <Button onClick={startNew} className="gap-2">
-                            <FilePlus2 className="h-4 w-4" /> مستند جديد
-                        </Button>
-                    </>
-                }
             />
 
             {setupRequired && (
