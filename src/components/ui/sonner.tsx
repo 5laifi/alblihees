@@ -11,6 +11,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      // Follow the document direction, so toasts read correctly on both the
+      // Arabic public site and the admin console (which sets its own direction).
+      dir="auto"
       className="toaster group"
       toastOptions={{
         classNames: {

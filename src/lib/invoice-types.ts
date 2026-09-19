@@ -48,7 +48,9 @@ export interface InvoiceSettings {
     phone: string;
     email: string;
     website: string;
-    // Payment details (kept in the database, never in source code)
+    // Payment details, printed on invoices only (never on quotations).
+    // Saved values win; an empty field falls back to the built-in default.
+    showPaymentDetails: boolean;
     payeeName: string;
     iban: string;
     accountNumber: string;
@@ -73,13 +75,14 @@ export interface InvoiceSettings {
 export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
     businessNameEn: "Thari Alblaihees",
     tagline: "شــــغــف يـــصــنــع أثــــر",
-    phone: "",
+    phone: "+96551414145",
     email: "Tharii@me.com",
     website: "www.alblaihees.com",
-    payeeName: "",
-    iban: "",
-    accountNumber: "",
-    accountName: "",
+    showPaymentDetails: true,
+    payeeName: "ضارى مشعل حمد البليهيس",
+    iban: "KW33BBYN0000000000000159489007",
+    accountNumber: "0159489007",
+    accountName: "DHARI M H ALBLAIHEES",
     liaisonTitle: "ضابط دائرة الإتصال",
     liaisonName: "",
     liaisonPhone: "",
@@ -92,6 +95,18 @@ export const DEFAULT_INVOICE_SETTINGS: InvoiceSettings = {
     defaultTemplate: "stage",
     startNumber: 1,
 };
+
+/** Settings that fall back to the built-in value when saved empty. */
+export const PAYMENT_DETAIL_KEYS = ["payeeName", "iban", "accountNumber", "accountName", "invoiceTerms"] as const;
+
+/** Fills empty payment fields from DEFAULT_INVOICE_SETTINGS; everything else is kept as saved. */
+export function withPaymentFallbacks(settings: InvoiceSettings): InvoiceSettings {
+    const next = { ...settings };
+    for (const key of PAYMENT_DETAIL_KEYS) {
+        if (!String(next[key] ?? "").trim()) next[key] = DEFAULT_INVOICE_SETTINGS[key];
+    }
+    return next;
+}
 
 export const TEMPLATES: { key: InvoiceTemplate; label: string; hint: string }[] = [
     { key: "stage", label: "المسرح", hint: "صورة المسرح الداكنة" },
@@ -112,6 +127,18 @@ export const CURRENCIES: { code: string; symbol: string; label: string }[] = [
 export const DOC_LABELS: Record<DocumentType, string> = {
     invoice: "فاتورة",
     quotation: "عرض سعر",
+};
+
+export const DOC_LABELS_PLURAL: Record<DocumentType, string> = {
+    invoice: "الفواتير",
+    quotation: "عروض الأسعار",
+};
+
+/** Arabic payment-status labels with the pill tone used by the admin screens. */
+export const PAYMENT_STATUS_META_AR: Record<PaymentStatus, { label: string; tone: "red" | "amber" | "green" }> = {
+    unpaid: { label: "غير مدفوعة", tone: "red" },
+    partial: { label: "مدفوعة جزئياً", tone: "amber" },
+    paid: { label: "مدفوعة", tone: "green" },
 };
 
 export const STATUS_LABELS: Record<PaymentStatus, string> = {
@@ -199,4 +226,103 @@ export function emptyInvoice(overrides: Partial<InvoiceData> = {}): InvoiceData 
 export function docFileName(inv: Pick<InvoiceData, "documentType" | "docNumber" | "clientName">): string {
     const safeClient = (inv.clientName || "").replace(/[\\/:*?"<>|]+/g, " ").trim();
     return `${DOC_LABELS[inv.documentType]} ${inv.docNumber}${safeClient ? ` - ${safeClient}` : ""}.pdf`;
+}
+
+// ---------- Admin console helpers (English UI) ----------
+// The printed document stays Arabic (DOC_LABELS, STATUS_LABELS above). The
+// admin screens around it are English, like the rest of the console.
+
+export const DOC_LABELS_EN: Record<DocumentType, string> = {
+    invoice: "Invoice",
+    quotation: "Quotation",
+};
+
+export const DOC_LABELS_EN_PLURAL: Record<DocumentType, string> = {
+    invoice: "Invoices",
+    quotation: "Quotations",
+};
+
+export const PAYMENT_STATUS_META: Record<PaymentStatus, { label: string; tone: "red" | "amber" | "green" }> = {
+    unpaid: { label: "Unpaid", tone: "red" },
+    partial: { label: "Partially paid", tone: "amber" },
+    paid: { label: "Paid", tone: "green" },
+};
+
+export const TEMPLATE_LABELS_EN: Record<InvoiceTemplate, { label: string; hint: string }> = {
+    stage: { label: "Stage", hint: "Dark stage photo header" },
+    portrait: { label: "Portrait", hint: "Blue header with the portrait" },
+    navy: { label: "Site identity", hint: "The website's navy colors" },
+};
+
+export const CURRENCY_LABELS_EN: Record<string, string> = {
+    KWD: "Kuwaiti Dinar",
+    SAR: "Saudi Riyal",
+    AED: "UAE Dirham",
+    QAR: "Qatari Riyal",
+    BHD: "Bahraini Dinar",
+    OMR: "Omani Rial",
+    USD: "US Dollar",
+};
+
+export function currencyLabelEn(code: string): string {
+    return CURRENCY_LABELS_EN[code] ?? code;
+}
+
+/** "KWD 1,215.5" — code first, Latin digits, up to 3 decimals. For admin lists and tiles. */
+export function formatAmount(value: number, currency: string): string {
+    return `${currency} ${formatNumber(value, "latin")}`;
+}
+
+/** Per-currency amounts joined, primary currency first: "KWD 715 · USD 500". */
+export function formatAmountMap(map: Record<string, number>, empty = "KWD 0", primary = "KWD"): string {
+    const entries = Object.entries(map).filter(([, amount]) => Number.isFinite(amount));
+    if (entries.length === 0) return empty;
+    entries.sort(([a], [b]) => (a === primary ? -1 : b === primary ? 1 : a.localeCompare(b)));
+    return entries.map(([code, amount]) => formatAmount(amount, code)).join(" · ");
+}
+
+/** "18 Sep 2026" from YYYY-MM-DD; falls back to the raw value. */
+export function formatDateEn(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+    if (!m) return iso || "—";
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+    });
+}
+
+/** What is still owed on an invoice (never negative). */
+export function remainingAmount(inv: Pick<SavedInvoice, "items" | "discount" | "amountPaid">): number {
+    return Math.max(0, round3(calcTotals(inv.items, inv.discount).total - (inv.amountPaid || 0)));
+}
+
+export interface DocumentSummary {
+    quotations: number;
+    invoices: number;
+    unpaid: number;
+    partial: number;
+    paid: number;
+    /** Outstanding amount per currency, e.g. { KWD: 1200.5 } */
+    outstanding: Record<string, number>;
+    /** Newest documents first (the list is already sorted by the server) */
+    recent: SavedInvoice[];
+}
+
+export function summarizeDocuments(list: SavedInvoice[], recentCount = 5): DocumentSummary {
+    const invoices = list.filter((doc) => doc.documentType === "invoice");
+    const outstanding: Record<string, number> = {};
+    for (const inv of invoices) {
+        const remaining = remainingAmount(inv);
+        if (remaining > 0) outstanding[inv.currency] = round3((outstanding[inv.currency] || 0) + remaining);
+    }
+    return {
+        quotations: list.length - invoices.length,
+        invoices: invoices.length,
+        unpaid: invoices.filter((inv) => inv.paymentStatus === "unpaid").length,
+        partial: invoices.filter((inv) => inv.paymentStatus === "partial").length,
+        paid: invoices.filter((inv) => inv.paymentStatus === "paid").length,
+        outstanding,
+        recent: list.slice(0, recentCount),
+    };
 }

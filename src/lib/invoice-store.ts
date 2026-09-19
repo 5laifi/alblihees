@@ -23,6 +23,7 @@ import {
     type InvoiceSettings,
     type NewInvoiceInput,
     type SavedInvoice,
+    withPaymentFallbacks,
 } from "./invoice-types";
 
 export type StorageBackend = "supabase" | "local";
@@ -373,7 +374,7 @@ export async function getInvoiceSettings(): Promise<InvoiceSettings> {
         },
         async () => (await readLocal()).settings
     );
-    return { ...DEFAULT_INVOICE_SETTINGS, ...result };
+    return withPaymentFallbacks({ ...DEFAULT_INVOICE_SETTINGS, ...result });
 }
 
 export async function saveInvoiceSettings(settings: InvoiceSettings): Promise<InvoiceSettings> {

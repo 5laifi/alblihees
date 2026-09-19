@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download, Loader2, Printer, X } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "@/i18n/routing";
 import { Button } from "@/components/ui/button";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
 import { ScaledPreview } from "@/components/invoice/scaled-preview";
@@ -84,7 +85,7 @@ export default function InvoicePrintPage() {
 
     if (state === "loading") {
         return (
-            <div className="min-h-screen flex items-center justify-center">
+            <div dir="rtl" className="flex min-h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         );
@@ -92,7 +93,7 @@ export default function InvoicePrintPage() {
 
     if (state === "error") {
         return (
-            <div dir="rtl" className="min-h-screen flex items-center justify-center text-muted-foreground">
+            <div dir="rtl" lang="ar" className="flex min-h-screen items-center justify-center px-4 text-center text-sm text-muted-foreground">
                 تعذر تحميل المستند. حدّث الصفحة أو سجّل الدخول من جديد.
             </div>
         );
@@ -100,21 +101,30 @@ export default function InvoicePrintPage() {
 
     if (state === "missing" || !invoice) {
         return (
-            <div dir="rtl" className="min-h-screen flex items-center justify-center text-muted-foreground">
-                لم يتم العثور على المستند.
+            <div dir="rtl" lang="ar" className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+                <p className="text-sm text-muted-foreground">لم يتم العثور على المستند.</p>
+                <Button asChild variant="outline">
+                    <Link href="/admin/invoices">العودة إلى الفواتير</Link>
+                </Button>
             </div>
         );
     }
 
     return (
-        <div className="invoice-print-area min-h-screen bg-slate-200 dark:bg-[#010d18]">
+        <div dir="rtl" lang="ar" className="invoice-print-area min-h-screen bg-slate-200 dark:bg-[#010d18]">
             <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
 
-            <div dir="rtl" className="invoice-no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-[#021526] px-4 py-3 text-white shadow-lg">
-                <div className="font-bold">
-                    {DOC_LABELS[invoice.documentType]} <span dir="ltr">#{invoice.docNumber}</span>
-                    <span className="mx-2 text-white/40">|</span>
-                    <span className="font-normal text-white/80">{invoice.clientName}</span>
+            <div className="invoice-no-print sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 bg-[#021526] px-4 py-3 text-white shadow-lg">
+                <div className="flex min-w-0 items-center gap-2 text-sm">
+                    <span className="font-semibold">
+                        {DOC_LABELS[invoice.documentType]} <span dir="ltr">#{invoice.docNumber}</span>
+                    </span>
+                    {invoice.clientName && (
+                        <>
+                            <span className="text-white/40">·</span>
+                            <bdi className="truncate text-white/80">{invoice.clientName}</bdi>
+                        </>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button onClick={download} disabled={exporting} className="gap-2 bg-[#78B7D0] text-[#021526] hover:bg-[#9ccbe0]">

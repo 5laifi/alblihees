@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { SegmentedTabs, type SegmentedOption } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { calcTotals, formatMoney, round3, type SavedInvoice } from "@/lib/invoice-types";
 
 interface PaymentDialogProps {
@@ -16,15 +18,25 @@ interface PaymentDialogProps {
     onUpdated: (invoice: SavedInvoice) => void;
 }
 
+type PaymentMode = "add" | "set";
+
+const MODE_OPTIONS: SegmentedOption<PaymentMode>[] = [
+    { value: "add", label: "إضافة دفعة" },
+    { value: "set", label: "تعديل إجمالي المدفوع" },
+];
+
 export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDialogProps) {
-    const [mode, setMode] = useState<"add" | "set">("add");
+    const [mode, setMode] = useState<PaymentMode>("add");
     const [amount, setAmount] = useState("");
     const [saving, setSaving] = useState(false);
+    // An overpayment needs a second Save press; any edit to the amount or mode resets this.
+    const [overAcknowledged, setOverAcknowledged] = useState(false);
 
     useEffect(() => {
         if (open) {
             setAmount("");
             setMode("add");
+            setOverAcknowledged(false);
         }
     }, [open, invoice?.id]);
 
@@ -35,15 +47,24 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
     const remaining = round3(total - paid);
     const money = (value: number) => formatMoney(value, invoice.currency, "latin");
 
+    // What the paid amount would become with the current input, so the note
+    // under the field can warn about an overpayment before Save is pressed.
+    const typed = amount === "" ? NaN : Number(amount);
+    const projectedPaid = Number.isFinite(typed) && typed >= 0 ? round3(mode === "add" ? paid + typed : typed) : null;
+    const overBy = projectedPaid !== null && projectedPaid > round3(total) ? round3(projectedPaid - total) : 0;
+
     async function submit() {
         if (!invoice) return;
         const value = Number(amount);
         if (amount === "" || Number.isNaN(value) || value < 0 || (mode === "add" && value === 0)) {
-            toast.error("أدخل مبلغاً صحيحاً");
+            toast.error("أدخل مبلغاً صحيحاً.");
             return;
         }
         const newPaid = round3(mode === "add" ? paid + value : value);
-        if (newPaid > round3(total) && !confirm(`المبلغ المدفوع سيتجاوز إجمالي الفاتورة بمقدار ${money(round3(newPaid - total))}. هل تريد المتابعة؟`)) {
+        // Overpaying is allowed, but only on a second Save press so a typo
+        // (5000 instead of 500) cannot slip through.
+        if (newPaid > round3(total) && !overAcknowledged) {
+            setOverAcknowledged(true);
             return;
         }
 
@@ -56,14 +77,14 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || !body.invoice) {
-                toast.error("تعذر تسجيل الدفعة");
+                toast.error("تعذر تسجيل الدفعة.");
                 return;
             }
             toast.success("تم تحديث حالة الدفع");
             onUpdated(body.invoice as SavedInvoice);
             onClose();
         } catch {
-            toast.error("تعذر الاتصال بالخادم");
+            toast.error("تعذر الاتصال بالخادم.");
         } finally {
             setSaving(false);
         }
@@ -72,39 +93,30 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
     return (
         <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
             <DialogContent dir="rtl" className="sm:max-w-md">
-                <DialogHeader className="text-right sm:text-right pr-8">
+                <DialogHeader className="pe-8 sm:text-start">
                     <DialogTitle>تسجيل دفعة</DialogTitle>
                     <DialogDescription>
-                        فاتورة رقم <span dir="ltr">{invoice.docNumber}</span> — <bdi>{invoice.clientName}</bdi>
+                        فاتورة رقم <span dir="ltr">#{invoice.docNumber}</span> · <bdi>{invoice.clientName || "—"}</bdi>
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid grid-cols-3 gap-3 py-2 text-center">
+                <div className="grid grid-cols-3 gap-3 py-2">
                     <Stat label="الإجمالي" value={money(total)} />
                     <Stat label="المدفوع" value={money(paid)} />
                     <Stat label={remaining < 0 ? "زيادة" : "المتبقي"} value={money(Math.abs(remaining))} highlight />
                 </div>
 
-                <div className="flex items-center p-1 bg-secondary rounded-lg w-fit text-sm">
-                    {(
-                        [
-                            ["add", "إضافة دفعة"],
-                            ["set", "تعديل إجمالي المدفوع"],
-                        ] as const
-                    ).map(([key, label]) => (
-                        <button
-                            key={key}
-                            type="button"
-                            onClick={() => {
-                                setMode(key);
-                                setAmount(key === "set" ? String(paid) : "");
-                            }}
-                            className={`px-3 py-1.5 rounded-md font-medium transition-all ${mode === key ? "bg-background shadow-sm" : "text-muted-foreground"}`}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
+                <SegmentedTabs
+                    variant="radio"
+                    aria-label="طريقة تسجيل الدفعة"
+                    value={mode}
+                    options={MODE_OPTIONS}
+                    onChange={(key) => {
+                        setMode(key);
+                        setAmount(key === "set" ? String(paid) : "");
+                        setOverAcknowledged(false);
+                    }}
+                />
 
                 <div className="space-y-2">
                     <Label htmlFor="paymentAmount">{mode === "add" ? "مبلغ الدفعة" : "إجمالي المدفوع"}</Label>
@@ -114,26 +126,47 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
                             type="number"
                             min={0}
                             step="any"
+                            inputMode="decimal"
                             dir="ltr"
-                            className="text-right"
+                            className="text-end"
                             placeholder="0"
                             value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            onChange={(e) => {
+                                setAmount(e.target.value);
+                                setOverAcknowledged(false);
+                            }}
                             onKeyDown={(e) => e.key === "Enter" && submit()}
                             autoFocus
                         />
                         {mode === "add" && remaining > 0 ? (
-                            <Button type="button" variant="outline" onClick={() => setAmount(String(remaining))}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="shrink-0"
+                                onClick={() => {
+                                    setAmount(String(remaining));
+                                    setOverAcknowledged(false);
+                                }}
+                            >
                                 كامل المتبقي
                             </Button>
                         ) : null}
                     </div>
+                    {overBy > 0 && (
+                        <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>
+                                هذا المبلغ يتجاوز إجمالي الفاتورة بمقدار <bdi>{money(overBy)}</bdi>.
+                                {overAcknowledged ? " اضغط «حفظ على أي حال» لتأكيد تسجيله." : ""}
+                            </span>
+                        </p>
+                    )}
                 </div>
 
                 <DialogFooter className="gap-2 sm:justify-start">
-                    <Button onClick={submit} disabled={saving} className="gap-2 bg-[#021526] hover:bg-[#0c3047] text-white dark:bg-[#78B7D0] dark:hover:bg-[#9ccbe0] dark:text-[#021526]">
+                    <Button onClick={submit} disabled={saving}>
                         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        حفظ
+                        {overBy > 0 && overAcknowledged ? "حفظ على أي حال" : "حفظ"}
                     </Button>
                     <Button variant="outline" onClick={onClose}>
                         إلغاء
@@ -146,9 +179,11 @@ export function PaymentDialog({ invoice, open, onClose, onUpdated }: PaymentDial
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
     return (
-        <div className={`rounded-lg border p-3 ${highlight ? "border-[#78B7D0]/50 bg-[#78B7D0]/10" : ""}`}>
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div className="font-bold mt-1 text-sm">{value}</div>
+        <div className={cn("rounded-lg border p-3", highlight && "border-[#78B7D0]/50 bg-[#78B7D0]/10")}>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="mt-1 text-sm font-semibold tabular-nums">
+                <bdi>{value}</bdi>
+            </p>
         </div>
     );
 }
